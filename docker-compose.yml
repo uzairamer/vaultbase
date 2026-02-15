@@ -1,0 +1,39 @@
+services:
+  db:
+    image: postgres:16-alpine
+    restart: unless-stopped
+    environment:
+      POSTGRES_USER: vaultbase
+      POSTGRES_PASSWORD: vaultbase_secret
+      POSTGRES_DB: vaultbase
+    ports:
+      - "7432:5432"
+    volumes:
+      - pgdata:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U vaultbase"]
+      interval: 5s
+      timeout: 5s
+      retries: 5
+
+  app:
+    build:
+      context: .
+      target: dev
+    restart: unless-stopped
+    ports:
+      - "7190:3000"
+    environment:
+      DATABASE_URL: postgresql://vaultbase:vaultbase_secret@db:5432/vaultbase
+      NEXTAUTH_URL: http://localhost:7190
+      NEXTAUTH_SECRET: super-secret-change-me-in-production
+    volumes:
+      - .:/app
+      - /app/node_modules
+      - /app/.next
+    depends_on:
+      db:
+        condition: service_healthy
+
+volumes:
+  pgdata:

@@ -8,7 +8,7 @@ export async function GET() {
 
   const items = await prisma.watchlistItem.findMany({
     where: { userId: session.user.id },
-    orderBy: { addedAt: "desc" },
+    orderBy: { symbol: "asc" },
   })
 
   return NextResponse.json(items)

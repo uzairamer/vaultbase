@@ -162,6 +162,18 @@ function get7DayAvgVolume(data: StockHistoryPoint[]): number | null {
   return total / sessions.length
 }
 
+function HiLo({ high, low }: { high: number; low: number }) {
+  if (high === 0 && low === 0) return <span className="text-muted-foreground/40">-</span>
+  const fmt = (n: number) => n.toLocaleString("en-PK", { minimumFractionDigits: 2, maximumFractionDigits: 2 })
+  return (
+    <span className="tabular-nums text-xs">
+      <span className="text-green-500">{fmt(high)}</span>
+      <span className="text-muted-foreground/50 mx-0.5">/</span>
+      <span className="text-red-500">{fmt(low)}</span>
+    </span>
+  )
+}
+
 function VolumeCell({ liveVol, avgVol }: { liveVol: number; avgVol: number | null }) {
   if (liveVol === 0) return <span className="text-muted-foreground/40">-</span>
   if (!avgVol || avgVol === 0) {
@@ -343,8 +355,8 @@ export function WatchlistTab() {
                         </div>
                       ))}
                     </div>
-                    <div className="grid grid-cols-6 gap-1 border-t pt-2">
-                      {["YoY","2Y","3Y","4Y","5Y","All"].map((l) => (
+                    <div className="grid grid-cols-5 gap-1 border-t pt-2">
+                      {["YoY","2Y","3Y","4Y","All"].map((l) => (
                         <div key={l} className="space-y-1">
                           <Skeleton className="h-3 w-6" />
                           <Skeleton className="h-4 w-8" />
@@ -364,7 +376,6 @@ export function WatchlistTab() {
                     { label: "2Y",  value: metrics?.yo2y ?? null },
                     { label: "3Y",  value: metrics?.yo3y ?? null },
                     { label: "4Y",  value: metrics?.yo4y ?? null },
-                    { label: "5Y",  value: metrics?.yo5y ?? null },
                     { label: "All", value: metrics?.inception ?? null },
                   ]
                   return (
@@ -372,7 +383,10 @@ export function WatchlistTab() {
                       {/* Header row */}
                       <div className="flex items-start justify-between gap-2">
                         <div>
-                          <div className="font-semibold">{i + 1}. {symbol}</div>
+                          <div className="flex items-center gap-2">
+                            <span className="font-semibold">{i + 1}. {symbol}</span>
+                            <HiLo high={lp?.dayHigh ?? 0} low={lp?.dayLow ?? 0} />
+                          </div>
                           <div className="mt-1">
                             <LastSeenBadge days={daysAtPriceMap.get(symbol) ?? null} />
                           </div>
@@ -423,7 +437,7 @@ export function WatchlistTab() {
                       </div>
 
                       {/* Multi-year metrics */}
-                      <div className="grid grid-cols-6 gap-x-1 gap-y-1 text-xs border-t pt-2">
+                      <div className="grid grid-cols-5 gap-x-2 gap-y-1 text-xs border-t pt-2">
                         {multiyear.map(({ label, value }) => (
                           <div key={label}>
                             <div className="text-muted-foreground mb-0.5">{label}</div>
@@ -451,7 +465,8 @@ export function WatchlistTab() {
                     <th className="text-left font-medium text-muted-foreground px-2 py-2.5 w-8">#</th>
                     <th className="text-left font-medium text-muted-foreground px-2 py-2.5">Name</th>
                     <th className="text-right font-medium text-muted-foreground px-2 py-2.5">Price</th>
-                    <th className="text-right font-medium text-muted-foreground px-2 py-2.5" title="Last time price was within ±2% of current">Last seen</th>
+                    <th className="text-right font-medium text-muted-foreground px-2 py-2.5 hidden md:table-cell">H / L</th>
+                    <th className="text-right font-medium text-muted-foreground px-2 py-2.5" title="Last time price was within ±1% of current">Last seen</th>
                     {SHORT_METRIC_KEYS.map((key) => (
                       <th key={key} className="text-right font-medium text-muted-foreground px-1.5 py-2.5">
                         {METRIC_LABELS[key]}
@@ -470,6 +485,7 @@ export function WatchlistTab() {
                           <td className="px-2 py-2.5 text-muted-foreground">{i + 1}</td>
                           <td className="px-2 py-2.5 font-medium">{symbol}</td>
                           <td className="px-2 py-2.5 text-right"><Skeleton className="h-4 w-20 ml-auto" /></td>
+                          <td className="px-2 py-2.5 text-right hidden md:table-cell"><Skeleton className="h-4 w-24 ml-auto" /></td>
                           <td className="px-2 py-2.5 text-right"><Skeleton className="h-4 w-16 ml-auto" /></td>
                           {SHORT_METRIC_KEYS.map((key) => (
                             <td key={key} className="px-1.5 py-2.5 text-right">
@@ -499,6 +515,9 @@ export function WatchlistTab() {
                               {price > 0
                                 ? `PKR ${price.toLocaleString("en-PK", { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`
                                 : "-"}
+                            </td>
+                            <td className="px-2 py-2.5 text-right hidden md:table-cell">
+                              <HiLo high={lp?.dayHigh ?? 0} low={lp?.dayLow ?? 0} />
                             </td>
                             <td className="px-2 py-2.5 text-right tabular-nums text-xs">
                               <LastSeenBadge days={daysAtPriceMap.get(symbol) ?? null} />

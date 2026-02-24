@@ -127,16 +127,20 @@ export interface LivePrice {
   symbol: string
   price: number
   volume: number
+  dayHigh: number
+  dayLow: number
 }
 
 async function fetchLivePrice(symbol: string): Promise<LivePrice> {
   const res = await fetch(`/api/insights/stock-live?symbol=${encodeURIComponent(symbol)}`)
-  if (!res.ok) return { symbol, price: 0, volume: 0 }
+  if (!res.ok) return { symbol, price: 0, volume: 0, dayHigh: 0, dayLow: 0 }
   const json = await res.json()
-  if (json.s !== "ok" || !json.c || json.c.length === 0) return { symbol, price: 0, volume: 0 }
+  if (json.s !== "ok" || !json.c || json.c.length === 0) return { symbol, price: 0, volume: 0, dayHigh: 0, dayLow: 0 }
   const price = json.c[json.c.length - 1]
   const volume = (json.v as number[])?.reduce((sum: number, v: number) => sum + v, 0) ?? 0
-  return { symbol, price, volume }
+  const dayHigh = json.h ? Math.max(...(json.h as number[])) : 0
+  const dayLow  = json.l ? Math.min(...(json.l as number[])) : 0
+  return { symbol, price, volume, dayHigh, dayLow }
 }
 
 export function useLivePrices(symbols: string[]) {

@@ -29,6 +29,7 @@ model User {
   stocks          StockHolding[]
   commodities     CommodityHolding[]
   sideInvestments SideInvestment[]
+  watchlist       WatchlistItem[]
 }
 
 model Account {
@@ -208,6 +209,19 @@ model Installment {
   receiptNote String?
 
   property Property @relation(fields: [propertyId], references: [id], onDelete: Cascade)
+}
+
+// ─── WATCHLIST ──────────────────────────────────────────────────────────────
+
+model WatchlistItem {
+  id      String   @id @default(cuid())
+  userId  String
+  symbol  String
+  addedAt DateTime @default(now())
+
+  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@unique([userId, symbol])
 }
 
 // ─── INVESTMENTS — STOCKS ────────────────────────────────────────────────────

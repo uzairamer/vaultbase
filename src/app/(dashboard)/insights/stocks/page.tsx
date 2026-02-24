@@ -1,6 +1,6 @@
 "use client"
 
-import { useState, useCallback } from "react"
+import { useState, useCallback, useEffect } from "react"
 import { useInsightsData, useStockHistories, fetchStockHistory } from "@/modules/insights/hooks"
 import type { StockHistory, HistoryPeriod } from "@/modules/insights/hooks"
 import { PageHeader } from "@/components/shared/page-header"
@@ -9,8 +9,9 @@ import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs"
 import { Input } from "@/components/ui/input"
 import { Button } from "@/components/ui/button"
 import { formatCurrency, formatPercent } from "@/lib/utils"
-import { EmptyState } from "@/components/shared/empty-state"
-import { BarChart3, Plus, X, Loader2 } from "lucide-react"
+import { Plus, X, Loader2 } from "lucide-react"
+import { WatchlistTab } from "@/modules/insights/components/watchlist-tab"
+import { StockHeatmap } from "@/modules/insights/components/stock-heatmap"
 import {
   BarChart,
   Bar,
@@ -42,6 +43,9 @@ const KMI30_SYMBOLS = [
 type ChartMode = "price" | "dod"
 
 export default function StockInsightsPage() {
+  const [mounted, setMounted] = useState(false)
+  useEffect(() => setMounted(true), [])
+
   const { data, isLoading } = useInsightsData()
 
   const stocks = ((data as Record<string, unknown[]>)?.stocks || []) as Record<string, unknown>[]
@@ -84,16 +88,9 @@ export default function StockInsightsPage() {
     setCustomSymbol("")
   }, [customSymbol, customHistories])
 
-  if (isLoading) return <div className="p-6">Loading...</div>
+  if (!mounted || isLoading) return <div className="p-6">Loading...</div>
 
-  if (stocks.length === 0) {
-    return (
-      <div>
-        <PageHeader title="Stock Performance" description="Analyze your stock portfolio" />
-        <EmptyState icon={BarChart3} title="No stocks" description="Add stock holdings to see performance analytics." />
-      </div>
-    )
-  }
+  const hasStocks = stocks.length > 0
 
   const chartData = stocks.map((s) => {
     const qty = Number(s.quantity)
@@ -124,15 +121,20 @@ export default function StockInsightsPage() {
 
   return (
     <div>
-      <PageHeader title="Stock Performance" description={`Total P&L: ${formatCurrency(totalPnl)} (${formatPercent(totalCost > 0 ? (totalPnl / totalCost) * 100 : 0)})`} />
+      <PageHeader
+        title="Stock Performance"
+        description={hasStocks ? `Total P&L: ${formatCurrency(totalPnl)} (${formatPercent(totalCost > 0 ? (totalPnl / totalCost) * 100 : 0)})` : "Analyze your stock portfolio"}
+      />
 
-      <Tabs defaultValue="overview" className="space-y-6">
+      <Tabs defaultValue={hasStocks ? "overview" : "watchlist"} className="space-y-6">
         <TabsList>
-          <TabsTrigger value="overview">Overview</TabsTrigger>
-          <TabsTrigger value="historical">Historical Performance</TabsTrigger>
+          {hasStocks && <TabsTrigger value="overview">Overview</TabsTrigger>}
+          {hasStocks && <TabsTrigger value="historical">Historical Performance</TabsTrigger>}
+          <TabsTrigger value="heatmap">Heatmap</TabsTrigger>
+          <TabsTrigger value="watchlist">Watchlist</TabsTrigger>
         </TabsList>
 
-        <TabsContent value="overview" className="space-y-6">
+        {hasStocks && <TabsContent value="overview" className="space-y-6">
           <div className="grid gap-6 md:grid-cols-2">
             <Card>
               <CardHeader>
@@ -196,9 +198,9 @@ export default function StockInsightsPage() {
               </div>
             </CardContent>
           </Card>
-        </TabsContent>
+        </TabsContent>}
 
-        <TabsContent value="historical" className="space-y-6">
+        {hasStocks && <TabsContent value="historical" className="space-y-6">
           <Tabs defaultValue="portfolio">
             <TabsList>
               <TabsTrigger value="portfolio">My Portfolio</TabsTrigger>
@@ -279,6 +281,14 @@ export default function StockInsightsPage() {
               )}
             </TabsContent>
           </Tabs>
+        </TabsContent>}
+
+        <TabsContent value="heatmap" className="space-y-6">
+          <StockHeatmap />
+        </TabsContent>
+
+        <TabsContent value="watchlist" className="space-y-6">
+          <WatchlistTab />
         </TabsContent>
       </Tabs>
     </div>

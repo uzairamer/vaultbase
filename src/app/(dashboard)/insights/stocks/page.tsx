@@ -12,6 +12,7 @@ import { formatCurrency, formatPercent } from "@/lib/utils"
 import { Plus, X, Loader2 } from "lucide-react"
 import { WatchlistTab } from "@/modules/insights/components/watchlist-tab"
 import { StockHeatmap } from "@/modules/insights/components/stock-heatmap"
+import { SipSimulator } from "@/modules/insights/components/sip-simulator"
 import {
   BarChart,
   Bar,
@@ -132,6 +133,7 @@ export default function StockInsightsPage() {
           {hasStocks && <TabsTrigger value="historical">Historical Performance</TabsTrigger>}
           <TabsTrigger value="heatmap">Heatmap</TabsTrigger>
           <TabsTrigger value="watchlist">Watchlist</TabsTrigger>
+          <TabsTrigger value="sip">SIP</TabsTrigger>
         </TabsList>
 
         {hasStocks && <TabsContent value="overview" className="space-y-6">
@@ -289,6 +291,10 @@ export default function StockInsightsPage() {
 
         <TabsContent value="watchlist" className="space-y-6">
           <WatchlistTab />
+        </TabsContent>
+
+        <TabsContent value="sip" className="space-y-6">
+          <SipSimulator />
         </TabsContent>
       </Tabs>
     </div>

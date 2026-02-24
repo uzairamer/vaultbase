@@ -11,7 +11,19 @@ import type { StockHistoryPoint } from "../hooks"
 
 type Tenure = "daily" | "weekly" | "monthly"
 
-// ─── Helpers ─────────────────────────────────────────────────────────────────
+// ─── Date helpers ─────────────────────────────────────────────────────────────
+
+function toISODate(d: Date): string {
+  return d.toISOString().split("T")[0]
+}
+
+function defaultFromDate(): string {
+  const d = new Date()
+  d.setFullYear(d.getFullYear() - 1)
+  return toISODate(d)
+}
+
+// ─── Tenure helpers ───────────────────────────────────────────────────────────
 
 function getWeekKey(ts: number): string {
   const date = new Date(ts * 1000)
@@ -25,7 +37,6 @@ function getMonthKey(ts: number): string {
   return `${date.getFullYear()}-${date.getMonth()}`
 }
 
-/** Returns the first trading day of each period (week/month) or every day. */
 function filterByTenure(data: StockHistoryPoint[], tenure: Tenure): StockHistoryPoint[] {
   if (tenure === "daily") return data
   const result: StockHistoryPoint[] = []
@@ -53,20 +64,17 @@ interface SipRow {
   gainLossPct: number
 }
 
-function computeSip(
-  data: StockHistoryPoint[],
-  amount: number,
-  tenure: Tenure,
-): SipRow[] {
+function computeSip(data: StockHistoryPoint[], amount: number, tenure: Tenure): SipRow[] {
   const periods = filterByTenure(data, tenure)
-  const currentPrice = data[data.length - 1]?.close ?? 0
+  // "current" price = closing price at the end of the selected range
+  const endPrice = data[data.length - 1]?.close ?? 0
 
   let cumShares = 0
   return periods.map((point, i) => {
     const sharesBought = point.close > 0 ? amount / point.close : 0
     cumShares += sharesBought
     const totalInvested = amount * (i + 1)
-    const currentValue = cumShares * currentPrice
+    const currentValue = cumShares * endPrice
     const gainLoss = currentValue - totalInvested
     const gainLossPct = totalInvested > 0 ? (gainLoss / totalInvested) * 100 : 0
     return { date: point.date, price: point.close, sharesBought, cumShares, totalInvested, currentValue, gainLoss, gainLossPct }
@@ -80,6 +88,8 @@ export function SipSimulator() {
   const [symbol, setSymbol] = useState("")
   const [amount, setAmount] = useState(10000)
   const [tenure, setTenure] = useState<Tenure>("monthly")
+  const [fromDate, setFromDate] = useState(defaultFromDate)
+  const [toDate, setToDate] = useState(toISODate(new Date()))
   const [historyData, setHistoryData] = useState<StockHistoryPoint[]>([])
   const [loading, setLoading] = useState(false)
   const [error, setError] = useState("")
@@ -89,7 +99,8 @@ export function SipSimulator() {
     if (!sym) return
     setLoading(true)
     setError("")
-    const result = await fetchStockHistory(sym, "1y")
+    // Fetch max history so any date range can be applied without re-fetching
+    const result = await fetchStockHistory(sym, "max")
     setLoading(false)
     if (result.data.length === 0) {
       setError(`No data found for "${sym}". Check the symbol and try again.`)
@@ -99,13 +110,21 @@ export function SipSimulator() {
     setHistoryData(result.data)
   }
 
+  // Filter history to the selected date range
+  const rangedData = useMemo(() => {
+    if (historyData.length === 0) return []
+    const fromTs = fromDate ? Math.floor(new Date(fromDate).getTime() / 1000) : 0
+    const toTs = toDate ? Math.floor(new Date(toDate + "T23:59:59").getTime() / 1000) : Infinity
+    return historyData.filter((p) => p.timestamp >= fromTs && p.timestamp <= toTs)
+  }, [historyData, fromDate, toDate])
+
   const rows = useMemo(
-    () => (historyData.length > 0 && amount > 0 ? computeSip(historyData, amount, tenure) : []),
-    [historyData, amount, tenure],
+    () => (rangedData.length > 0 && amount > 0 ? computeSip(rangedData, amount, tenure) : []),
+    [rangedData, amount, tenure],
   )
 
   const summary = rows.length > 0 ? rows[rows.length - 1] : null
-  const currentPrice = historyData.length > 0 ? historyData[historyData.length - 1].close : 0
+  const endPrice = rangedData.length > 0 ? rangedData[rangedData.length - 1].close : 0
 
   const fmtPKR = (n: number) =>
     `PKR ${n.toLocaleString("en-PK", { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`
@@ -115,7 +134,7 @@ export function SipSimulator() {
       {/* ── Controls ── */}
       <Card>
         <CardHeader>
-          <CardTitle className="text-base">SIP Simulator — 1 Year Backtest</CardTitle>
+          <CardTitle className="text-base">SIP Simulator</CardTitle>
         </CardHeader>
         <CardContent className="space-y-4">
           <div className="flex flex-wrap gap-4 items-end">
@@ -138,7 +157,7 @@ export function SipSimulator() {
 
             {/* Amount */}
             <div className="space-y-1.5">
-              <label className="text-xs font-medium text-muted-foreground">Investment per Period (PKR)</label>
+              <label className="text-xs font-medium text-muted-foreground">Amount per Period (PKR)</label>
               <Input
                 type="number"
                 value={amount}
@@ -167,9 +186,39 @@ export function SipSimulator() {
                 ))}
               </div>
             </div>
+
+            {/* Date range */}
+            <div className="space-y-1.5">
+              <label className="text-xs font-medium text-muted-foreground">From</label>
+              <Input
+                type="date"
+                value={fromDate}
+                max={toDate}
+                onChange={(e) => setFromDate(e.target.value)}
+                className="w-36"
+              />
+            </div>
+
+            <div className="space-y-1.5">
+              <label className="text-xs font-medium text-muted-foreground">To</label>
+              <Input
+                type="date"
+                value={toDate}
+                min={fromDate}
+                max={toISODate(new Date())}
+                onChange={(e) => setToDate(e.target.value)}
+                className="w-36"
+              />
+            </div>
           </div>
 
           {error && <p className="text-sm text-red-500">{error}</p>}
+
+          {symbol && rangedData.length === 0 && historyData.length > 0 && (
+            <p className="text-sm text-yellow-500">
+              No trading data found for {symbol} in the selected date range.
+            </p>
+          )}
         </CardContent>
       </Card>
 
@@ -191,16 +240,16 @@ export function SipSimulator() {
               <p className="text-xs text-muted-foreground">Shares Accumulated</p>
               <p className="mt-1 text-lg font-semibold tabular-nums">{summary.cumShares.toFixed(2)}</p>
               <p className="text-xs text-muted-foreground mt-0.5">
-                {symbol} @ {fmtPKR(currentPrice)} now
+                {symbol} @ {fmtPKR(endPrice)} at end date
               </p>
             </CardContent>
           </Card>
 
           <Card>
             <CardContent className="pt-5">
-              <p className="text-xs text-muted-foreground">Current Value</p>
+              <p className="text-xs text-muted-foreground">Value at End Date</p>
               <p className="mt-1 text-lg font-semibold tabular-nums">{formatCurrency(summary.currentValue)}</p>
-              <p className="text-xs text-muted-foreground mt-0.5">at latest price</p>
+              <p className="text-xs text-muted-foreground mt-0.5">{toDate}</p>
             </CardContent>
           </Card>
 
@@ -236,7 +285,7 @@ export function SipSimulator() {
                   <th className="text-right font-medium text-muted-foreground px-3 py-2.5">Shares Bought</th>
                   <th className="text-right font-medium text-muted-foreground px-3 py-2.5">Cum. Shares</th>
                   <th className="text-right font-medium text-muted-foreground px-3 py-2.5">Total Invested</th>
-                  <th className="text-right font-medium text-muted-foreground px-3 py-2.5">Current Value</th>
+                  <th className="text-right font-medium text-muted-foreground px-3 py-2.5">Value at End</th>
                   <th className="text-right font-medium text-muted-foreground px-3 py-2.5">Gain / Loss</th>
                 </tr>
               </thead>
@@ -270,10 +319,10 @@ export function SipSimulator() {
       )}
 
       {/* ── Empty state ── */}
-      {rows.length === 0 && !loading && (
+      {rows.length === 0 && !loading && historyData.length === 0 && (
         <div className="rounded-lg border border-dashed p-12 text-center">
           <p className="text-sm text-muted-foreground">
-            Enter a stock symbol and investment amount above, then press{" "}
+            Enter a stock symbol and press{" "}
             <kbd className="rounded border px-1.5 py-0.5 text-xs font-mono">Enter</kbd> or click search to simulate.
           </p>
         </div>

@@ -41,7 +41,7 @@ const KMI30_SYMBOLS = [
   "COLG", "NESTLE", "UNITY", "AVN", "MLCF", "SYST",
 ]
 
-type ChartMode = "price" | "dod"
+type ChartMode = "price" | "dod" | "normalized"
 
 export default function StockInsightsPage() {
   const [mounted, setMounted] = useState(false)
@@ -341,6 +341,8 @@ function HistoricalChart({
   const mergedData =
     mode === "price"
       ? buildMergedHistory(histories, activeStocks)
+      : mode === "normalized"
+      ? buildNormalizedHistory(histories, activeStocks)
       : buildDodHistory(histories, activeStocks)
 
   return (
@@ -350,7 +352,7 @@ function HistoricalChart({
           <div className="flex flex-col gap-3">
             <div className="flex items-center justify-between flex-wrap gap-2">
               <CardTitle className="text-base">
-                {mode === "price" ? "Share Price" : "Day-over-Day % Change"}
+                {mode === "price" ? "Share Price" : mode === "normalized" ? "Normalised (% of Latest Price)" : "Day-over-Day % Change"}
               </CardTitle>
               <div className="flex items-center gap-2">
                 {/* Period toggle */}
@@ -376,6 +378,14 @@ function HistoricalChart({
                     }`}
                   >
                     Price
+                  </button>
+                  <button
+                    onClick={() => onModeChange("normalized")}
+                    className={`rounded-md px-3 py-1 transition-colors ${
+                      mode === "normalized" ? "bg-primary text-primary-foreground" : "text-muted-foreground hover:text-foreground"
+                    }`}
+                  >
+                    Normalise
                   </button>
                   <button
                     onClick={() => onModeChange("dod")}
@@ -439,13 +449,16 @@ function HistoricalChart({
                 <YAxis
                   className="text-xs"
                   tick={{ fontSize: 11 }}
-                  tickFormatter={mode === "dod" ? (v: number) => `${v.toFixed(1)}%` : undefined}
+                  tickFormatter={mode === "price" ? undefined : (v: number) => `${v.toFixed(mode === "normalized" ? 0 : 1)}%`}
                 />
                 {mode === "dod" ? <ReferenceLine y={0} stroke="#888" strokeDasharray="3 3" /> : null}
+                {mode === "normalized" ? <ReferenceLine y={100} stroke="#888" strokeDasharray="3 3" /> : null}
                 <Tooltip
                   formatter={(value: number, name: string) => [
                     mode === "price"
                       ? `PKR ${value.toLocaleString("en-PK", { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`
+                      : mode === "normalized"
+                      ? `${value.toFixed(1)}% of latest`
                       : `${value >= 0 ? "+" : ""}${value.toFixed(2)}%`,
                     name,
                   ]}
@@ -536,6 +549,31 @@ function buildMergedHistory(
     for (const point of h.data) {
       const existing = dateMap.get(point.timestamp) || { date: point.date, timestamp: point.timestamp }
       existing[h.symbol] = point.close
+      dateMap.set(point.timestamp, existing)
+    }
+  }
+
+  return Array.from(dateMap.values()).sort(
+    (a, b) => (a.timestamp as number) - (b.timestamp as number),
+  )
+}
+
+function buildNormalizedHistory(
+  histories: StockHistory[],
+  activeStocks: Set<string>,
+) {
+  const dateMap = new Map<number, Record<string, unknown>>()
+
+  for (const h of histories) {
+    if (!activeStocks.has(h.symbol)) continue
+    if (h.data.length === 0) continue
+    const latestPrice = h.data[h.data.length - 1].close
+    if (latestPrice === 0) continue
+
+    for (const point of h.data) {
+      const normalized = Math.round((point.close / latestPrice) * 10000) / 100 // 2dp %
+      const existing = dateMap.get(point.timestamp) || { date: point.date, timestamp: point.timestamp }
+      existing[h.symbol] = normalized
       dateMap.set(point.timestamp, existing)
     }
   }

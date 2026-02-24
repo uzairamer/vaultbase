@@ -1,7 +1,7 @@
 "use client"
 
 import { useState, useCallback, useEffect } from "react"
-import { useInsightsData, useStockHistories, fetchStockHistory } from "@/modules/insights/hooks"
+import { useInsightsData, useStockHistories, fetchStockHistory, useLivePrices } from "@/modules/insights/hooks"
 import type { StockHistory, HistoryPeriod } from "@/modules/insights/hooks"
 import { PageHeader } from "@/components/shared/page-header"
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card"
@@ -52,6 +52,9 @@ export default function StockInsightsPage() {
   const stocks = ((data as Record<string, unknown[]>)?.stocks || []) as Record<string, unknown>[]
   const portfolioSymbols = stocks.map((s) => s.symbol as string)
 
+  const { data: livePrices } = useLivePrices(portfolioSymbols)
+  const livePriceMap = new Map((livePrices ?? []).map((lp) => [lp.symbol, lp.price]))
+
   // Period state
   const [portfolioPeriod, setPortfolioPeriod] = useState<HistoryPeriod>("1y")
   const [kmiPeriod, setKmiPeriod] = useState<HistoryPeriod>("1y")
@@ -96,7 +99,7 @@ export default function StockInsightsPage() {
   const chartData = stocks.map((s) => {
     const qty = Number(s.quantity)
     const avg = Number(s.avgBuyPrice)
-    const cur = Number(s.currentPrice ?? avg)
+    const cur = livePriceMap.get(s.symbol as string) ?? Number(s.currentPrice ?? avg)
     const cost = qty * avg
     const value = qty * cur
     const pnl = value - cost

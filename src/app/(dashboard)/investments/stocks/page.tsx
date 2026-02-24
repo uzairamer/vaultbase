@@ -2,6 +2,7 @@
 
 import { useState } from "react"
 import { useStocks, useCreateStock, useDeleteStock } from "@/modules/investments/hooks"
+import { useLivePrices } from "@/modules/insights/hooks"
 import { PageHeader } from "@/components/shared/page-header"
 import { Button } from "@/components/ui/button"
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogTrigger } from "@/components/ui/dialog"
@@ -10,7 +11,6 @@ import { Label } from "@/components/ui/label"
 import { EmptyState } from "@/components/shared/empty-state"
 import { DataTable } from "@/components/shared/data-table"
 import { Plus, BarChart3, Trash2 } from "lucide-react"
-import { Badge } from "@/components/ui/badge"
 import { formatCurrency, formatPercent } from "@/lib/utils"
 import { type ColumnDef } from "@tanstack/react-table"
 import { toast } from "sonner"
@@ -22,18 +22,27 @@ export default function StocksPage() {
   const deleteStock = useDeleteStock()
   const [open, setOpen] = useState(false)
 
-  const totalValue = (stocks as Record<string, unknown>[]).reduce((sum: number, s: Record<string, unknown>) => {
-    const qty = Number(s.quantity)
-    const price = Number(s.currentPrice ?? s.avgBuyPrice)
-    return sum + qty * price
-  }, 0)
+  const symbols = (stocks as Record<string, unknown>[]).map((s) => s.symbol as string)
+  const { data: livePrices } = useLivePrices(symbols)
+  const livePriceMap = new Map((livePrices ?? []).map((lp) => [lp.symbol, lp.price]))
+
+  const getPrice = (s: Record<string, unknown>) =>
+    livePriceMap.get(s.symbol as string) ?? Number(s.currentPrice ?? s.avgBuyPrice)
+
+  const totalValue = (stocks as Record<string, unknown>[]).reduce(
+    (sum, s) => sum + Number(s.quantity) * getPrice(s),
+    0,
+  )
 
   const columns: ColumnDef<Record<string, unknown>>[] = [
     {
       accessorKey: "symbol",
       header: "Symbol",
       cell: ({ row }) => (
-        <Link href={`/investments/stocks/${(row.original as Record<string, string>).id}`} className="font-medium text-primary hover:underline">
+        <Link
+          href={`/investments/stocks/${(row.original as Record<string, string>).id}`}
+          className="font-medium text-primary hover:underline"
+        >
           {row.getValue("symbol") as string}
         </Link>
       ),
@@ -50,11 +59,12 @@ export default function StocksPage() {
       cell: ({ row }) => formatCurrency(Number(row.getValue("avgBuyPrice"))),
     },
     {
-      accessorKey: "currentPrice",
-      header: "Current",
+      id: "currentPrice",
+      header: "Live Price",
       cell: ({ row }) => {
-        const cp = row.getValue("currentPrice")
-        return cp ? formatCurrency(Number(cp)) : "-"
+        const sym = (row.original as Record<string, unknown>).symbol as string
+        const live = livePriceMap.get(sym)
+        return live ? formatCurrency(live) : <span className="text-muted-foreground/50">—</span>
       },
     },
     {
@@ -62,17 +72,17 @@ export default function StocksPage() {
       header: "Value",
       cell: ({ row }) => {
         const qty = Number((row.original as Record<string, unknown>).quantity)
-        const price = Number((row.original as Record<string, unknown>).currentPrice ?? (row.original as Record<string, unknown>).avgBuyPrice)
-        return formatCurrency(qty * price)
+        return formatCurrency(qty * getPrice(row.original as Record<string, unknown>))
       },
     },
     {
       id: "pnl",
       header: "P&L",
       cell: ({ row }) => {
-        const qty = Number((row.original as Record<string, unknown>).quantity)
-        const avg = Number((row.original as Record<string, unknown>).avgBuyPrice)
-        const cur = Number((row.original as Record<string, unknown>).currentPrice ?? avg)
+        const s = row.original as Record<string, unknown>
+        const qty = Number(s.quantity)
+        const avg = Number(s.avgBuyPrice)
+        const cur = getPrice(s)
         const pnl = (cur - avg) * qty
         const pct = avg > 0 ? ((cur - avg) / avg) * 100 : 0
         return (
@@ -85,9 +95,15 @@ export default function StocksPage() {
     {
       id: "actions",
       cell: ({ row }) => (
-        <Button variant="ghost" size="icon" onClick={() => {
-          deleteStock.mutate((row.original as Record<string, string>).id, { onSuccess: () => toast.success("Deleted") })
-        }}>
+        <Button
+          variant="ghost"
+          size="icon"
+          onClick={() =>
+            deleteStock.mutate((row.original as Record<string, string>).id, {
+              onSuccess: () => toast.success("Deleted"),
+            })
+          }
+        >
           <Trash2 className="h-4 w-4" />
         </Button>
       ),
@@ -99,16 +115,15 @@ export default function StocksPage() {
     const fd = new FormData(e.currentTarget)
     createStock.mutate(
       {
-        symbol: fd.get("symbol") as string,
+        symbol: (fd.get("symbol") as string).trim().toUpperCase(),
         name: fd.get("name") as string,
         quantity: Number(fd.get("quantity")),
         avgBuyPrice: Number(fd.get("avgBuyPrice")),
-        currentPrice: Number(fd.get("currentPrice")) || undefined,
       },
       {
         onSuccess: () => { setOpen(false); toast.success("Stock added") },
         onError: (err) => toast.error(err.message),
-      }
+      },
     )
   }
 
@@ -127,27 +142,26 @@ export default function StocksPage() {
               <div className="grid grid-cols-2 gap-4">
                 <div className="space-y-2">
                   <Label>Symbol</Label>
-                  <Input name="symbol" placeholder="e.g. AAPL" required />
+                  <Input name="symbol" placeholder="e.g. MEBL" required />
                 </div>
                 <div className="space-y-2">
                   <Label>Name</Label>
-                  <Input name="name" placeholder="e.g. Apple Inc." required />
+                  <Input name="name" placeholder="e.g. Meezan Bank" required />
                 </div>
               </div>
-              <div className="grid grid-cols-3 gap-4">
+              <div className="grid grid-cols-2 gap-4">
                 <div className="space-y-2">
                   <Label>Quantity</Label>
                   <Input name="quantity" type="number" step="0.0001" min="0" required />
                 </div>
                 <div className="space-y-2">
-                  <Label>Avg Buy Price</Label>
+                  <Label>Avg Buy Price (PKR)</Label>
                   <Input name="avgBuyPrice" type="number" step="0.0001" min="0" required />
                 </div>
-                <div className="space-y-2">
-                  <Label>Current Price</Label>
-                  <Input name="currentPrice" type="number" step="0.0001" min="0" />
-                </div>
               </div>
+              <p className="text-xs text-muted-foreground">
+                Live price is fetched automatically — no need to enter it manually.
+              </p>
               <Button type="submit" className="w-full" disabled={createStock.isPending}>
                 {createStock.isPending ? "Adding..." : "Add Stock"}
               </Button>
@@ -159,7 +173,12 @@ export default function StocksPage() {
       {(stocks as Record<string, unknown>[]).length === 0 ? (
         <EmptyState icon={BarChart3} title="No stocks" description="Add your first stock holding." />
       ) : (
-        <DataTable columns={columns} data={stocks as Record<string, unknown>[]} searchKey="symbol" searchPlaceholder="Search by symbol..." />
+        <DataTable
+          columns={columns}
+          data={stocks as Record<string, unknown>[]}
+          searchKey="symbol"
+          searchPlaceholder="Search by symbol..."
+        />
       )}
     </div>
   )

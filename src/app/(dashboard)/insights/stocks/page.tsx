@@ -50,7 +50,29 @@ export default function StockInsightsPage() {
   const { data, isLoading } = useInsightsData()
 
   const stocks = ((data as Record<string, unknown[]>)?.stocks || []) as Record<string, unknown>[]
-  const portfolioSymbols = stocks.map((s) => s.symbol as string)
+
+  // Aggregate holdings with the same symbol: sum quantities, weighted-average buy price
+  const aggregatedStocks = Object.values(
+    stocks.reduce<Record<string, { symbol: string; quantity: number; totalCost: number; currentPrice: unknown }>>(
+      (acc, s) => {
+        const sym = s.symbol as string
+        const qty = Number(s.quantity)
+        const avg = Number(s.avgBuyPrice)
+        if (!acc[sym]) acc[sym] = { symbol: sym, quantity: 0, totalCost: 0, currentPrice: s.currentPrice }
+        acc[sym].quantity += qty
+        acc[sym].totalCost += qty * avg
+        return acc
+      },
+      {}
+    )
+  ).map((entry) => ({
+    symbol: entry.symbol,
+    quantity: entry.quantity,
+    avgBuyPrice: entry.quantity > 0 ? entry.totalCost / entry.quantity : 0,
+    currentPrice: entry.currentPrice,
+  }))
+
+  const portfolioSymbols = aggregatedStocks.map((s) => s.symbol)
 
   const { data: livePrices } = useLivePrices(portfolioSymbols)
   const livePriceMap = new Map((livePrices ?? []).map((lp) => [lp.symbol, lp.price]))
@@ -94,17 +116,19 @@ export default function StockInsightsPage() {
 
   if (!mounted || isLoading) return <div className="p-6">Loading...</div>
 
-  const hasStocks = stocks.length > 0
+  const hasStocks = aggregatedStocks.length > 0
 
-  const chartData = stocks.map((s) => {
-    const qty = Number(s.quantity)
-    const avg = Number(s.avgBuyPrice)
-    const cur = livePriceMap.get(s.symbol as string) ?? Number(s.currentPrice ?? avg)
+  const chartData = aggregatedStocks.map((s) => {
+    const qty = s.quantity
+    const avg = s.avgBuyPrice
+    const cur = livePriceMap.get(s.symbol) ?? Number(s.currentPrice ?? avg)
     const cost = qty * avg
     const value = qty * cur
     const pnl = value - cost
     return {
-      name: s.symbol as string,
+      name: s.symbol,
+      quantity: qty,
+      avgBuyPrice: avg,
       value,
       cost,
       pnl,
@@ -185,21 +209,58 @@ export default function StockInsightsPage() {
               <CardTitle className="text-base">Holdings Summary</CardTitle>
             </CardHeader>
             <CardContent>
-              <div className="space-y-3">
-                {chartData.map((s) => (
-                  <div key={s.name} className="flex items-center justify-between p-3 rounded-lg bg-muted/50">
-                    <div>
-                      <p className="font-medium">{s.name}</p>
-                      <p className="text-sm text-muted-foreground">Cost: {formatCurrency(s.cost)}</p>
+              <div className="grid gap-3 md:grid-cols-2">
+                {chartData.map((s) => {
+                  const isUp = s.pnl >= 0
+                  const barPct = Math.min(Math.abs(s.pnlPct), 100)
+                  return (
+                    <div key={s.name} className="rounded-xl border p-4 space-y-3">
+                      {/* Symbol + P&L */}
+                      <div className="flex items-start justify-between gap-2">
+                        <div>
+                          <p className="font-bold text-base">{s.name}</p>
+                          <p className="text-xs text-muted-foreground tabular-nums mt-0.5">
+                            {s.quantity.toFixed(2)} shares &middot; avg {formatCurrency(s.avgBuyPrice)}
+                          </p>
+                        </div>
+                        <div className="text-right shrink-0">
+                          <p className={`font-semibold tabular-nums text-sm ${isUp ? "text-green-500" : "text-red-500"}`}>
+                            {isUp ? "+" : ""}{formatCurrency(s.pnl)}
+                          </p>
+                          <p className={`text-xs tabular-nums ${isUp ? "text-green-500" : "text-red-500"}`}>
+                            {formatPercent(s.pnlPct)}
+                          </p>
+                        </div>
+                      </div>
+
+                      {/* P&L bar */}
+                      <div className="h-1 rounded-full bg-muted overflow-hidden">
+                        <div
+                          className={`h-full rounded-full transition-all ${isUp ? "bg-green-500" : "bg-red-500"}`}
+                          style={{ width: `${barPct}%` }}
+                        />
+                      </div>
+
+                      {/* Stats row */}
+                      <div className="grid grid-cols-3 gap-1 text-center">
+                        <div className="rounded-lg bg-muted/50 px-2 py-1.5">
+                          <p className="text-[10px] text-muted-foreground uppercase tracking-wide">Cost</p>
+                          <p className="text-xs font-medium tabular-nums mt-0.5">{formatCurrency(s.cost)}</p>
+                        </div>
+                        <div className="rounded-lg bg-muted/50 px-2 py-1.5">
+                          <p className="text-[10px] text-muted-foreground uppercase tracking-wide">Value</p>
+                          <p className="text-xs font-medium tabular-nums mt-0.5">{formatCurrency(s.value)}</p>
+                        </div>
+                        <div className={`rounded-lg px-2 py-1.5 ${isUp ? "bg-green-500/10" : "bg-red-500/10"}`}>
+                          <p className="text-[10px] text-muted-foreground uppercase tracking-wide">Return</p>
+                          <p className={`text-xs font-medium tabular-nums mt-0.5 ${isUp ? "text-green-500" : "text-red-500"}`}>
+                            {formatPercent(s.pnlPct)}
+                          </p>
+                        </div>
+                      </div>
                     </div>
-                    <div className="text-right">
-                      <p className="font-medium">{formatCurrency(s.value)}</p>
-                      <p className={`text-sm ${s.pnl >= 0 ? "text-green-500" : "text-red-500"}`}>
-                        {formatCurrency(s.pnl)} ({formatPercent(s.pnlPct)})
-                      </p>
-                    </div>
-                  </div>
-                ))}
+                  )
+                })}
               </div>
             </CardContent>
           </Card>

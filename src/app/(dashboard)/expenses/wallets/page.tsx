@@ -1,7 +1,9 @@
 "use client"
 
 import { useState } from "react"
-import { useWallets, useCreateWallet, useDeleteWallet, useCreateTransaction, useCategories, useReceivables, useLiabilities } from "@/modules/expenses/hooks"
+import { useWallets, useCreateWallet, useDeleteWallet, useCreateTransaction, useTransfer, useCategories, useReceivables, useLiabilities } from "@/modules/expenses/hooks"
+import { WalletSegmentsDialog } from "@/modules/expenses/components/wallet-segments-dialog"
+import type { Segment } from "@/modules/expenses/components/wallet-segments-dialog"
 import { PageHeader } from "@/components/shared/page-header"
 import { Button } from "@/components/ui/button"
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card"
@@ -10,7 +12,7 @@ import { Input } from "@/components/ui/input"
 import { Label } from "@/components/ui/label"
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select"
 import { EmptyState } from "@/components/shared/empty-state"
-import { Plus, Wallet, Trash2, Building, Banknote, Smartphone, ArrowDownLeft, ArrowUpRight } from "lucide-react"
+import { Plus, Wallet, Trash2, Building, Banknote, Smartphone, ArrowDownLeft, ArrowUpRight, ArrowLeftRight, LayoutGrid } from "lucide-react"
 import { formatCurrency } from "@/lib/utils"
 import { Badge } from "@/components/ui/badge"
 import { WALLET_TYPES, INFLOW_SUBTYPES, OUTFLOW_SUBTYPES } from "@/lib/constants"
@@ -31,12 +33,19 @@ export default function WalletsPage() {
   const createWallet = useCreateWallet()
   const deleteWallet = useDeleteWallet()
   const createTx = useCreateTransaction()
+  const transfer = useTransfer()
   const [open, setOpen] = useState(false)
 
   // Transaction dialog state
   const [txWalletId, setTxWalletId] = useState<string | null>(null)
   const [txType, setTxType] = useState<"inflow" | "outflow" | null>(null)
   const [txSubType, setTxSubType] = useState("")
+
+  // Transfer dialog state
+  const [transferFromId, setTransferFromId] = useState<string | null>(null)
+
+  // Segments dialog state
+  const [segmentsWalletId, setSegmentsWalletId] = useState<string | null>(null)
 
   const totalBalance = (wallets as Record<string, unknown>[]).reduce(
     (sum: number, w: Record<string, unknown>) => sum + Number(w.balance),
@@ -100,6 +109,24 @@ export default function WalletsPage() {
     setTxWalletId(null)
     setTxType(null)
     setTxSubType("")
+  }
+
+  function handleTransferSubmit(e: React.FormEvent<HTMLFormElement>) {
+    e.preventDefault()
+    const fd = new FormData(e.currentTarget)
+    transfer.mutate(
+      {
+        fromWalletId: transferFromId,
+        toWalletId: fd.get("toWalletId") as string,
+        amount: Number(fd.get("amount")),
+        description: (fd.get("description") as string) || undefined,
+        date: fd.get("date") as string,
+      },
+      {
+        onSuccess: () => { setTransferFromId(null); toast.success("Transfer completed") },
+        onError: (err) => toast.error(err.message),
+      }
+    )
   }
 
   const txWallet = (wallets as Record<string, unknown>[]).find((w) => w.id === txWalletId)
@@ -299,6 +326,75 @@ export default function WalletsPage() {
         </DialogContent>
       </Dialog>
 
+      {/* Transfer Dialog */}
+      <Dialog open={!!transferFromId} onOpenChange={(isOpen) => { if (!isOpen) setTransferFromId(null) }}>
+        <DialogContent className="sm:max-w-md">
+          <DialogHeader>
+            <DialogTitle className="flex items-center gap-2">
+              <ArrowLeftRight className="h-4 w-4" />
+              Transfer Between Wallets
+            </DialogTitle>
+          </DialogHeader>
+          <form onSubmit={handleTransferSubmit} className="space-y-4">
+            <div className="space-y-2">
+              <Label>From</Label>
+              <div className="rounded-md border bg-muted/50 px-3 py-2 text-sm font-medium">
+                {(wallets as Record<string, unknown>[]).find((w) => w.id === transferFromId)?.name as string ?? "—"}
+              </div>
+            </div>
+            <div className="space-y-2">
+              <Label>To</Label>
+              <Select name="toWalletId" required>
+                <SelectTrigger><SelectValue placeholder="Select destination wallet" /></SelectTrigger>
+                <SelectContent>
+                  {(wallets as Record<string, unknown>[])
+                    .filter((w) => w.id !== transferFromId)
+                    .map((w) => (
+                      <SelectItem key={w.id as string} value={w.id as string}>
+                        {w.name as string} — {formatCurrency(Number(w.balance))}
+                      </SelectItem>
+                    ))}
+                </SelectContent>
+              </Select>
+            </div>
+            <div className="space-y-2">
+              <Label>Amount</Label>
+              <Input name="amount" type="number" step="0.01" min="0.01" required />
+            </div>
+            <div className="space-y-2">
+              <Label>Description <span className="text-xs text-muted-foreground">(optional)</span></Label>
+              <Input name="description" placeholder="e.g. Moving savings" />
+            </div>
+            <div className="space-y-2">
+              <Label>Date</Label>
+              <Input name="date" type="date" required defaultValue={new Date().toISOString().split("T")[0]} />
+            </div>
+            <Button type="submit" className="w-full" disabled={transfer.isPending}>
+              {transfer.isPending ? "Transferring..." : "Transfer"}
+            </Button>
+          </form>
+        </DialogContent>
+      </Dialog>
+
+      {/* Segments Dialog */}
+      {segmentsWalletId && (() => {
+        const w = (wallets as Record<string, unknown>[]).find((w) => w.id === segmentsWalletId)
+        if (!w) return null
+        return (
+          <WalletSegmentsDialog
+            open={!!segmentsWalletId}
+            onOpenChange={(isOpen) => { if (!isOpen) setSegmentsWalletId(null) }}
+            walletId={w.id as string}
+            walletName={w.name as string}
+            walletBalance={Number(w.balance)}
+            segments={((w.segments ?? []) as Segment[]).map((s) => ({
+              ...s,
+              amount: Number(s.amount),
+            }))}
+          />
+        )
+      })()}
+
       {(wallets as Record<string, unknown>[]).length === 0 ? (
         <EmptyState
           icon={Wallet}
@@ -340,6 +436,39 @@ export default function WalletsPage() {
                   <p className="text-xs text-muted-foreground">
                     {((wallet._count as Record<string, number>)?.transactions || 0)} transactions
                   </p>
+
+                  {/* Segment bar */}
+                  {(() => {
+                    const segs = ((wallet.segments ?? []) as Record<string, unknown>[])
+                    if (segs.length === 0) return null
+                    const balance = Number(wallet.balance)
+                    return (
+                      <div className="space-y-1.5">
+                        <div className="flex h-1.5 w-full overflow-hidden rounded-full bg-muted">
+                          {segs.map((s) => {
+                            const pct = balance > 0 ? Math.min((Number(s.amount) / balance) * 100, 100) : 0
+                            return (
+                              <div
+                                key={s.id as string}
+                                style={{ width: `${pct}%`, backgroundColor: s.color as string }}
+                                className="h-full"
+                                title={`${s.name as string}: ${formatCurrency(Number(s.amount))}`}
+                              />
+                            )
+                          })}
+                        </div>
+                        <div className="flex flex-wrap gap-x-2 gap-y-0.5">
+                          {segs.map((s) => (
+                            <span key={s.id as string} className="flex items-center gap-1 text-[10px] text-muted-foreground">
+                              <span className="h-1.5 w-1.5 rounded-full shrink-0" style={{ backgroundColor: s.color as string }} />
+                              {s.name as string}
+                            </span>
+                          ))}
+                        </div>
+                      </div>
+                    )
+                  })()}
+
                   <div className="flex gap-2">
                     <Button
                       size="sm"
@@ -357,7 +486,26 @@ export default function WalletsPage() {
                     >
                       <ArrowUpRight className="h-3.5 w-3.5 mr-1" /> Outflow
                     </Button>
+                    <Button
+                      size="sm"
+                      variant="outline"
+                      className="flex-1 text-blue-600 border-blue-200 hover:bg-blue-50 hover:text-blue-700 dark:border-blue-900 dark:hover:bg-blue-950"
+                      onClick={() => setTransferFromId(wallet.id as string)}
+                      disabled={(wallets as Record<string, unknown>[]).length < 2}
+                      title={(wallets as Record<string, unknown>[]).length < 2 ? "Need at least 2 wallets to transfer" : undefined}
+                    >
+                      <ArrowLeftRight className="h-3.5 w-3.5 mr-1" /> Transfer
+                    </Button>
                   </div>
+                  <Button
+                    size="sm"
+                    variant="ghost"
+                    className="w-full text-xs text-muted-foreground h-7"
+                    onClick={() => setSegmentsWalletId(wallet.id as string)}
+                  >
+                    <LayoutGrid className="h-3 w-3 mr-1.5" />
+                    Manage Segments
+                  </Button>
                 </CardContent>
               </Card>
             )

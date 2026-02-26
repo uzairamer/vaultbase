@@ -18,7 +18,10 @@ export async function GET() {
   const wallets = await prisma.wallet.findMany({
     where: { userId: session.user.id },
     orderBy: { createdAt: "desc" },
-    include: { _count: { select: { transactions: true } } },
+    include: {
+      _count: { select: { transactions: true } },
+      segments: { orderBy: [{ isDefault: "desc" }, { createdAt: "asc" }] },
+    },
   })
 
   return NextResponse.json(wallets)
@@ -34,6 +37,18 @@ export async function POST(req: Request) {
 
   const wallet = await prisma.wallet.create({
     data: { ...parsed.data, userId: session.user.id },
+  })
+
+  // Auto-create the Default segment with the full initial balance
+  await prisma.walletSegment.create({
+    data: {
+      userId: session.user.id,
+      walletId: wallet.id,
+      name: "Default",
+      amount: parsed.data.balance,
+      color: "#6366f1",
+      isDefault: true,
+    },
   })
 
   return NextResponse.json(wallet, { status: 201 })

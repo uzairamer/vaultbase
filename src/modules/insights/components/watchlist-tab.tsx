@@ -355,14 +355,6 @@ export function WatchlistTab() {
                         </div>
                       ))}
                     </div>
-                    <div className="grid grid-cols-5 gap-1 border-t pt-2">
-                      {["YoY","2Y","3Y","4Y","All"].map((l) => (
-                        <div key={l} className="space-y-1">
-                          <Skeleton className="h-3 w-6" />
-                          <Skeleton className="h-4 w-8" />
-                        </div>
-                      ))}
-                    </div>
                   </div>
                 ))
               : symbols.map((symbol, i) => {
@@ -371,13 +363,6 @@ export function WatchlistTab() {
                   const price = lp?.price ?? 0
                   const isAlerting = alertPrices.has(symbol)
                   const refPrice = alertPrices.get(symbol)
-                  const multiyear: { label: string; value: number | null }[] = [
-                    { label: "YoY", value: metrics?.yoy ?? null },
-                    { label: "2Y",  value: metrics?.yo2y ?? null },
-                    { label: "3Y",  value: metrics?.yo3y ?? null },
-                    { label: "4Y",  value: metrics?.yo4y ?? null },
-                    { label: "All", value: metrics?.inception ?? null },
-                  ]
                   return (
                     <div key={symbol} className="rounded-lg border p-3 space-y-3 text-sm">
                       {/* Header row */}
@@ -432,16 +417,6 @@ export function WatchlistTab() {
                           <div key={key}>
                             <div className="text-muted-foreground mb-0.5">{METRIC_LABELS[key]}</div>
                             <ChangeCell value={metrics?.[key]} />
-                          </div>
-                        ))}
-                      </div>
-
-                      {/* Multi-year metrics */}
-                      <div className="grid grid-cols-5 gap-x-2 gap-y-1 text-xs border-t pt-2">
-                        {multiyear.map(({ label, value }) => (
-                          <div key={label}>
-                            <div className="text-muted-foreground mb-0.5">{label}</div>
-                            <ChangeCell value={value} />
                           </div>
                         ))}
                       </div>

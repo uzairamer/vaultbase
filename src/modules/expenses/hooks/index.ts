@@ -135,6 +135,46 @@ export function useDeleteLiability() {
   })
 }
 
+export function useCreateSegment() {
+  const qc = useQueryClient()
+  return useMutation({
+    mutationFn: (data: Record<string, unknown>) =>
+      mutator("/api/expenses/segments", { method: "POST", body: JSON.stringify(data) }),
+    onSuccess: () => qc.invalidateQueries({ queryKey: ["wallets"] }),
+  })
+}
+
+export function useUpdateSegment() {
+  const qc = useQueryClient()
+  return useMutation({
+    mutationFn: (data: Record<string, unknown>) =>
+      mutator("/api/expenses/segments", { method: "PUT", body: JSON.stringify(data) }),
+    onSuccess: () => qc.invalidateQueries({ queryKey: ["wallets"] }),
+  })
+}
+
+export function useDeleteSegment() {
+  const qc = useQueryClient()
+  return useMutation({
+    mutationFn: (id: string) =>
+      mutator(`/api/expenses/segments?id=${id}`, { method: "DELETE" }),
+    onSuccess: () => qc.invalidateQueries({ queryKey: ["wallets"] }),
+  })
+}
+
+export function useTransfer() {
+  const qc = useQueryClient()
+  return useMutation({
+    mutationFn: (data: Record<string, unknown>) =>
+      mutator("/api/expenses/transfers", { method: "POST", body: JSON.stringify(data) }),
+    onSuccess: () => {
+      qc.invalidateQueries({ queryKey: ["transactions"] })
+      qc.invalidateQueries({ queryKey: ["wallets"] })
+      qc.invalidateQueries({ queryKey: ["insights"] })
+    },
+  })
+}
+
 export function useImportTransactions() {
   const qc = useQueryClient()
   return useMutation({

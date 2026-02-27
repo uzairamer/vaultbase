@@ -43,6 +43,41 @@ const KMI30_SYMBOLS = [
 
 type ChartMode = "price" | "dod" | "normalized"
 
+function BarChartTooltip({ active, payload }: { active?: boolean; payload?: { payload: Record<string, number> }[] }) {
+  if (!active || !payload?.length) return null
+  const d = payload[0].payload
+  const isUp = d.pnl >= 0
+  return (
+    <div className="rounded-xl border bg-background shadow-xl p-4 text-sm min-w-[200px] space-y-3">
+      <p className="font-bold text-base">{d.name}</p>
+      <div className="space-y-2">
+        <div className="flex items-center justify-between gap-6">
+          <div className="flex items-center gap-1.5">
+            <span className="inline-block h-2.5 w-2.5 rounded-sm" style={{ background: "#6366f1" }} />
+            <span className="text-muted-foreground">Invested</span>
+          </div>
+          <span className="font-semibold tabular-nums">{d.cost?.toLocaleString("en-PK", { style: "currency", currency: "PKR", maximumFractionDigits: 0 })}</span>
+        </div>
+        <div className="flex items-center justify-between gap-6">
+          <div className="flex items-center gap-1.5">
+            <span className="inline-block h-2.5 w-2.5 rounded-sm" style={{ background: isUp ? "#22c55e" : "#ef4444" }} />
+            <span className="text-muted-foreground">P&L</span>
+          </div>
+          <span className={`font-semibold tabular-nums ${isUp ? "text-green-500" : "text-red-500"}`}>
+            {isUp ? "+" : ""}{d.pnl?.toLocaleString("en-PK", { style: "currency", currency: "PKR", maximumFractionDigits: 0 })}
+          </span>
+        </div>
+        <div className="border-t pt-2 flex items-center justify-between gap-6">
+          <span className="text-muted-foreground">Return</span>
+          <span className={`font-semibold tabular-nums ${isUp ? "text-green-500" : "text-red-500"}`}>
+            {isUp ? "+" : ""}{d.pnlPct?.toFixed(2)}%
+          </span>
+        </div>
+      </div>
+    </div>
+  )
+}
+
 export default function StockInsightsPage() {
   const [mounted, setMounted] = useState(false)
   useEffect(() => setMounted(true), [])
@@ -164,55 +199,62 @@ export default function StockInsightsPage() {
         </TabsList>
 
         {hasStocks && <TabsContent value="overview" className="space-y-6">
-          <div className="grid gap-6 md:grid-cols-2">
-            <Card>
-              <CardHeader>
-                <CardTitle className="text-base">Portfolio Value by Stock</CardTitle>
-              </CardHeader>
-              <CardContent>
-                <ResponsiveContainer width="100%" height={300}>
-                  <BarChart data={chartData}>
-                    <CartesianGrid strokeDasharray="3 3" className="stroke-muted" />
-                    <XAxis dataKey="name" className="text-xs" />
-                    <YAxis className="text-xs" />
-                    <Tooltip formatter={(value: number) => formatCurrency(value)} />
-                    <Bar dataKey="value" fill="hsl(var(--primary))" radius={[4, 4, 0, 0]} />
-                  </BarChart>
-                </ResponsiveContainer>
-              </CardContent>
-            </Card>
-
-            <Card>
-              <CardHeader>
-                <CardTitle className="text-base">Profit / Loss by Stock</CardTitle>
-              </CardHeader>
-              <CardContent>
-                <ResponsiveContainer width="100%" height={300}>
-                  <BarChart data={chartData}>
-                    <CartesianGrid strokeDasharray="3 3" className="stroke-muted" />
-                    <XAxis dataKey="name" className="text-xs" />
-                    <YAxis className="text-xs" />
-                    <Tooltip formatter={(value: number) => formatCurrency(value)} />
-                    <Bar dataKey="pnl" radius={[4, 4, 0, 0]}>
-                      {chartData.map((entry, index) => (
-                        <Cell key={index} fill={entry.pnl >= 0 ? "#22c55e" : "#ef4444"} />
-                      ))}
-                    </Bar>
-                  </BarChart>
-                </ResponsiveContainer>
-              </CardContent>
-            </Card>
-          </div>
+          <Card>
+            <CardHeader>
+              <CardTitle className="text-base">Invested vs P&L by Stock</CardTitle>
+            </CardHeader>
+            <CardContent>
+              <ResponsiveContainer width="100%" height={320}>
+                <BarChart data={chartData} barCategoryGap="25%">
+                  <CartesianGrid strokeDasharray="3 3" className="stroke-muted" />
+                  <XAxis dataKey="name" className="text-xs" />
+                  <YAxis className="text-xs" tickFormatter={(v: number) => formatCurrency(v)} width={100} />
+                  <Tooltip content={<BarChartTooltip />} cursor={{ fill: "hsl(var(--muted))", opacity: 0.4 }} />
+                  <Legend />
+                  <Bar dataKey="cost" name="Invested" fill="#6366f1" radius={[4, 4, 0, 0]} />
+                  <Bar dataKey="pnl" name="P&L" radius={[4, 4, 0, 0]}>
+                    {chartData.map((entry, index) => (
+                      <Cell key={index} fill={entry.pnl >= 0 ? "#22c55e" : "#ef4444"} />
+                    ))}
+                  </Bar>
+                </BarChart>
+              </ResponsiveContainer>
+            </CardContent>
+          </Card>
 
           <Card>
             <CardHeader>
               <CardTitle className="text-base">Holdings Summary</CardTitle>
             </CardHeader>
-            <CardContent>
+            <CardContent className="space-y-4">
+
+              {/* Portfolio totals banner */}
+              <div className="grid grid-cols-3 divide-x rounded-xl border bg-muted/30">
+                <div className="px-4 py-3 text-center">
+                  <p className="text-[10px] text-muted-foreground uppercase tracking-wide">Total Invested</p>
+                  <p className="text-sm font-bold tabular-nums mt-1">{formatCurrency(totalCost)}</p>
+                </div>
+                <div className="px-4 py-3 text-center">
+                  <p className="text-[10px] text-muted-foreground uppercase tracking-wide">Total P&L</p>
+                  <p className={`text-sm font-bold tabular-nums mt-1 ${totalPnl >= 0 ? "text-green-500" : "text-red-500"}`}>
+                    {totalPnl >= 0 ? "+" : ""}{formatCurrency(totalPnl)}
+                  </p>
+                  <p className={`text-[10px] tabular-nums ${totalPnl >= 0 ? "text-green-500" : "text-red-500"}`}>
+                    {formatPercent(totalCost > 0 ? (totalPnl / totalCost) * 100 : 0)}
+                  </p>
+                </div>
+                <div className="px-4 py-3 text-center">
+                  <p className="text-[10px] text-muted-foreground uppercase tracking-wide">Current Value</p>
+                  <p className="text-sm font-bold tabular-nums mt-1">{formatCurrency(totalValue)}</p>
+                </div>
+              </div>
+
               <div className="grid gap-3 md:grid-cols-2">
                 {chartData.map((s) => {
                   const isUp = s.pnl >= 0
                   const barPct = Math.min(Math.abs(s.pnlPct), 100)
+                  const costSharePct = totalCost > 0 ? (s.cost / totalCost) * 100 : 0
+                  const valueSharePct = totalValue > 0 ? (s.value / totalValue) * 100 : 0
                   return (
                     <div key={s.name} className="rounded-xl border p-4 space-y-3">
                       {/* Symbol + P&L */}
@@ -244,18 +286,23 @@ export default function StockInsightsPage() {
                       {/* Stats row */}
                       <div className="grid grid-cols-3 gap-1 text-center">
                         <div className="rounded-lg bg-muted/50 px-2 py-1.5">
-                          <p className="text-[10px] text-muted-foreground uppercase tracking-wide">Cost</p>
+                          <p className="text-[10px] text-muted-foreground uppercase tracking-wide">Invested</p>
                           <p className="text-xs font-medium tabular-nums mt-0.5">{formatCurrency(s.cost)}</p>
+                          <p className="text-[10px] text-muted-foreground tabular-nums">{costSharePct.toFixed(1)}% of total</p>
+                        </div>
+                        <div className={`rounded-lg px-2 py-1.5 ${isUp ? "bg-green-500/10" : "bg-red-500/10"}`}>
+                          <p className="text-[10px] text-muted-foreground uppercase tracking-wide">P&L</p>
+                          <p className={`text-xs font-medium tabular-nums mt-0.5 ${isUp ? "text-green-500" : "text-red-500"}`}>
+                            {isUp ? "+" : ""}{formatCurrency(s.pnl)}
+                          </p>
+                          <p className={`text-[10px] tabular-nums ${isUp ? "text-green-500" : "text-red-500"}`}>
+                            {formatPercent(s.pnlPct)}
+                          </p>
                         </div>
                         <div className="rounded-lg bg-muted/50 px-2 py-1.5">
                           <p className="text-[10px] text-muted-foreground uppercase tracking-wide">Value</p>
                           <p className="text-xs font-medium tabular-nums mt-0.5">{formatCurrency(s.value)}</p>
-                        </div>
-                        <div className={`rounded-lg px-2 py-1.5 ${isUp ? "bg-green-500/10" : "bg-red-500/10"}`}>
-                          <p className="text-[10px] text-muted-foreground uppercase tracking-wide">Return</p>
-                          <p className={`text-xs font-medium tabular-nums mt-0.5 ${isUp ? "text-green-500" : "text-red-500"}`}>
-                            {formatPercent(s.pnlPct)}
-                          </p>
+                          <p className="text-[10px] text-muted-foreground tabular-nums">{valueSharePct.toFixed(1)}% of total</p>
                         </div>
                       </div>
                     </div>

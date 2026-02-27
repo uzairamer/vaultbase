@@ -5,6 +5,7 @@ import { z } from "zod"
 
 const transactionSchema = z.object({
   walletId: z.string().min(1),
+  segmentId: z.string().optional(),      // for crediting/debiting a specific wallet segment
   categoryId: z.string().optional(),
   type: z.enum(["inflow", "outflow"]),
   subType: z.string().optional(),
@@ -58,7 +59,7 @@ export async function POST(req: Request) {
   if (!wallet) return NextResponse.json({ error: "Wallet not found" }, { status: 404 })
 
   // Strip extra fields not in the Transaction model
-  const { personName, receivableId, liabilityId, ...txData } = parsed.data
+  const { personName, receivableId, liabilityId, segmentId, ...txData } = parsed.data
 
   const transaction = await prisma.transaction.create({
     data: { ...txData, userId: session.user.id },
@@ -70,6 +71,14 @@ export async function POST(req: Request) {
     where: { id: parsed.data.walletId },
     data: { balance: { increment: balanceChange } },
   })
+
+  // Update segment amount if specified
+  if (segmentId) {
+    await prisma.walletSegment.updateMany({
+      where: { id: segmentId, walletId: parsed.data.walletId, userId: session.user.id },
+      data: { amount: { increment: balanceChange } },
+    })
+  }
 
   // Auto-create receivable when lending money
   if (parsed.data.subType === "lending" && personName) {

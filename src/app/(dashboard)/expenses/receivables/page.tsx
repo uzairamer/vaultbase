@@ -1,7 +1,7 @@
 "use client"
 
 import { useState } from "react"
-import { useReceivables, useCreateReceivable, useDeleteReceivable } from "@/modules/expenses/hooks"
+import { useReceivables, useCreateReceivable, useDeleteReceivable, useWallets, useCreateTransaction } from "@/modules/expenses/hooks"
 import { PageHeader } from "@/components/shared/page-header"
 import { Button } from "@/components/ui/button"
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card"
@@ -9,6 +9,7 @@ import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogTrigger } from 
 import { Input } from "@/components/ui/input"
 import { Label } from "@/components/ui/label"
 import { Textarea } from "@/components/ui/textarea"
+import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select"
 import { EmptyState } from "@/components/shared/empty-state"
 import { Plus, Users, Trash2 } from "lucide-react"
 import { Badge } from "@/components/ui/badge"
@@ -27,10 +28,24 @@ function ProgressBar({ value, max }: { value: number; max: number }) {
 
 export default function ReceivablesPage() {
   const { data: receivables = [], isLoading } = useReceivables()
+  const { data: wallets = [] } = useWallets()
   const createReceivable = useCreateReceivable()
+  const createTransaction = useCreateTransaction()
   const deleteReceivable = useDeleteReceivable()
   const [open, setOpen] = useState(false)
   const [payOpen, setPayOpen] = useState<string | null>(null)
+  const [payWalletId, setPayWalletId] = useState<string>("")
+  const [paySegmentId, setPaySegmentId] = useState<string>("")
+
+  const typedWallets = wallets as Array<{
+    id: string
+    name: string
+    balance: number
+    segments: Array<{ id: string; name: string; amount: number }>
+  }>
+
+  const selectedWallet = typedWallets.find((w) => w.id === payWalletId)
+  const selectedSegments = selectedWallet?.segments ?? []
 
   const totalOwed = (receivables as Record<string, unknown>[])
     .filter((r) => r.status !== "settled")
@@ -61,16 +76,22 @@ export default function ReceivablesPage() {
   function handlePayment(e: React.FormEvent<HTMLFormElement>) {
     e.preventDefault()
     const fd = new FormData(e.currentTarget)
-    createReceivable.mutate(
+    createTransaction.mutate(
       {
+        walletId: payWalletId,
+        segmentId: paySegmentId || undefined,
+        type: "inflow",
+        subType: "receivable_collection",
         receivableId: payOpen,
         amount: Number(fd.get("amount")),
         date: fd.get("date") as string,
-        notes: fd.get("notes") as string || undefined,
+        description: (fd.get("notes") as string) || undefined,
       },
       {
         onSuccess: () => {
           setPayOpen(null)
+          setPayWalletId("")
+          setPaySegmentId("")
           toast.success("Payment recorded")
         },
         onError: (err) => toast.error(err.message),
@@ -125,7 +146,16 @@ export default function ReceivablesPage() {
       </PageHeader>
 
       {/* Payment dialog */}
-      <Dialog open={!!payOpen} onOpenChange={() => setPayOpen(null)}>
+      <Dialog
+        open={!!payOpen}
+        onOpenChange={(o) => {
+          if (!o) {
+            setPayOpen(null)
+            setPayWalletId("")
+            setPaySegmentId("")
+          }
+        }}
+      >
         <DialogContent>
           <DialogHeader><DialogTitle>Record Payment</DialogTitle></DialogHeader>
           <form onSubmit={handlePayment} className="space-y-4">
@@ -138,10 +168,40 @@ export default function ReceivablesPage() {
               <Input name="date" type="date" required defaultValue={new Date().toISOString().split("T")[0]} />
             </div>
             <div className="space-y-2">
+              <Label>Deposit to Wallet</Label>
+              <Select value={payWalletId} onValueChange={(v) => { setPayWalletId(v); setPaySegmentId("") }} required>
+                <SelectTrigger>
+                  <SelectValue placeholder="Select wallet" />
+                </SelectTrigger>
+                <SelectContent>
+                  {typedWallets.map((w) => (
+                    <SelectItem key={w.id} value={w.id}>{w.name}</SelectItem>
+                  ))}
+                </SelectContent>
+              </Select>
+            </div>
+            {selectedSegments.length > 0 && (
+              <div className="space-y-2">
+                <Label>Segment <span className="text-muted-foreground text-xs">(optional)</span></Label>
+                <Select value={paySegmentId} onValueChange={setPaySegmentId}>
+                  <SelectTrigger>
+                    <SelectValue placeholder="Select segment" />
+                  </SelectTrigger>
+                  <SelectContent>
+                    {selectedSegments.map((s) => (
+                      <SelectItem key={s.id} value={s.id}>{s.name}</SelectItem>
+                    ))}
+                  </SelectContent>
+                </Select>
+              </div>
+            )}
+            <div className="space-y-2">
               <Label>Notes</Label>
               <Input name="notes" />
             </div>
-            <Button type="submit" className="w-full">Record Payment</Button>
+            <Button type="submit" className="w-full" disabled={!payWalletId || createTransaction.isPending}>
+              {createTransaction.isPending ? "Recording..." : "Record Payment"}
+            </Button>
           </form>
         </DialogContent>
       </Dialog>

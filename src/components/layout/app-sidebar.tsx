@@ -18,6 +18,7 @@ import {
   PieChart,
   LineChart,
   BarChart,
+  FileBarChart2,
 } from "lucide-react"
 import {
   Sidebar,
@@ -62,6 +63,7 @@ const navItems = [
       { title: "Liabilities", href: "/expenses/liabilities", icon: HandCoins },
       { title: "Import", href: "/expenses/import", icon: Upload },
       { title: "Categories", href: "/expenses/categories", icon: Tag },
+      { title: "Financial Position", href: "/expenses/report", icon: FileBarChart2 },
     ],
   },
   {

@@ -103,7 +103,10 @@ export function useCreateReceivable() {
   const qc = useQueryClient()
   return useMutation({
     mutationFn: (data: Record<string, unknown>) => mutator("/api/expenses/receivables", { method: "POST", body: JSON.stringify(data) }),
-    onSuccess: () => qc.invalidateQueries({ queryKey: ["receivables"] }),
+    onSuccess: () => {
+      qc.invalidateQueries({ queryKey: ["receivables"] })
+      qc.invalidateQueries({ queryKey: ["wallets"] })
+    },
   })
 }
 
@@ -172,6 +175,13 @@ export function useTransfer() {
       qc.invalidateQueries({ queryKey: ["wallets"] })
       qc.invalidateQueries({ queryKey: ["insights"] })
     },
+  })
+}
+
+export function useFinancialReport(year: number, quarter: number) {
+  return useQuery({
+    queryKey: ["financial-report", year, quarter],
+    queryFn: () => fetcher(`/api/expenses/report?year=${year}&quarter=${quarter}`),
   })
 }
 

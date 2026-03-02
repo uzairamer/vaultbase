@@ -16,6 +16,7 @@ export const INFLOW_SUBTYPES = [
   { value: "earned_income", label: "Earned Income" },
   { value: "passive_income", label: "Passive / Investment Income" },
   { value: "receivable_collection", label: "Receivable Collection" },
+  { value: "stock_sale", label: "Stock Sale" },
   { value: "other_inflow", label: "Other (Gift, Refund, Claim)" },
 ] as const
 

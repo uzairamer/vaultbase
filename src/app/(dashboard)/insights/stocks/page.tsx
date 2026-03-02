@@ -56,16 +56,21 @@ export default function StockOverviewPage() {
     stocks.reduce<Record<string, { symbol: string; quantity: number; totalCost: number; currentPrice: unknown }>>(
       (acc, s) => {
         const sym = s.symbol as string
-        const qty = Number(s.quantity)
+        const buyQty = Number(s.quantity)
+        const soldQty = ((s.trades as Record<string, unknown>[]) ?? [])
+          .filter((t) => t.type === "sell")
+          .reduce((sum, t) => sum + Number(t.quantity), 0)
+        const netQty = Math.max(0, buyQty - soldQty)
         const avg = Number(s.avgBuyPrice)
         if (!acc[sym]) acc[sym] = { symbol: sym, quantity: 0, totalCost: 0, currentPrice: s.currentPrice }
-        acc[sym].quantity += qty
-        acc[sym].totalCost += qty * avg
+        acc[sym].quantity += netQty
+        acc[sym].totalCost += netQty * avg
         return acc
       },
       {}
     )
-  ).map((entry) => ({
+  ).filter((entry) => entry.quantity > 0)
+  .map((entry) => ({
     symbol: entry.symbol,
     quantity: entry.quantity,
     avgBuyPrice: entry.quantity > 0 ? entry.totalCost / entry.quantity : 0,

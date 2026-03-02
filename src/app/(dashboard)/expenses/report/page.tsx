@@ -22,6 +22,7 @@ const SUBTYPES: Record<string, string> = {
   earned_income: "Earned Income",
   passive_income: "Passive Income",
   receivable_collection: "Receivable Collection",
+  stock_sale: "Stock Sale",
   other_inflow: "Other Inflow",
   fixed_expense: "Fixed Expense",
   variable_expense: "Variable Expense",

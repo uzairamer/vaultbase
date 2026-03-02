@@ -26,7 +26,7 @@ export async function GET(req: Request) {
   const [wallets, stocks, commodities, properties, sideInvestments, receivables, liabilities, transactions] =
     await Promise.all([
       prisma.wallet.findMany({ where: { userId }, include: { segments: true } }),
-      prisma.stockHolding.findMany({ where: { userId } }),
+      prisma.stockHolding.findMany({ where: { userId }, include: { trades: { where: { type: "sell" } } } }),
       prisma.commodityHolding.findMany({ where: { userId } }),
       prisma.property.findMany({ where: { userId }, include: { installments: true } }),
       prisma.sideInvestment.findMany({ where: { userId } }),
@@ -50,15 +50,17 @@ export async function GET(req: Request) {
   }))
   const walletTotal = walletItems.reduce((sum, w) => sum + w.balance, 0)
 
-  // Aggregate holdings with the same symbol: sum quantities, weighted-average buy price
+  // Aggregate holdings with the same symbol: use net qty (buy − sold), weighted-average buy price
   const stockAggMap = stocks.reduce<Record<string, { symbol: string; name: string; quantity: number; totalCost: number; currentPrice: number | null }>>(
     (acc, s) => {
       const sym = s.symbol
-      const qty = Number(s.quantity)
+      const buyQty = Number(s.quantity)
+      const soldQty = s.trades.reduce((sum, t) => sum + Number(t.quantity), 0)
+      const netQty = Math.max(0, buyQty - soldQty)
       const avg = Number(s.avgBuyPrice)
       if (!acc[sym]) acc[sym] = { symbol: sym, name: s.name, quantity: 0, totalCost: 0, currentPrice: s.currentPrice ? Number(s.currentPrice) : null }
-      acc[sym].quantity += qty
-      acc[sym].totalCost += qty * avg
+      acc[sym].quantity += netQty
+      acc[sym].totalCost += netQty * avg
       return acc
     },
     {}

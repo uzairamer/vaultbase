@@ -83,6 +83,18 @@ export function useDeleteStock() {
   })
 }
 
+export function useSellStock() {
+  const qc = useQueryClient()
+  return useMutation({
+    mutationFn: (data: Record<string, unknown>) =>
+      mutator("/api/investments/stocks/sell", { method: "POST", body: JSON.stringify(data) }),
+    onSuccess: () => {
+      qc.invalidateQueries({ queryKey: ["stocks"] })
+      qc.invalidateQueries({ queryKey: ["wallets"] })
+    },
+  })
+}
+
 // Commodities
 export function useCommodities() {
   return useQuery({ queryKey: ["commodities"], queryFn: () => fetcher("/api/investments/commodities") })

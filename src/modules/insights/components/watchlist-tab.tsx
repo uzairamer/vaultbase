@@ -152,6 +152,14 @@ function getLast7Days(data: StockHistoryPoint[]): number[] {
   return data.slice(-7).map((d) => d.close)
 }
 
+function get1YAvgPrice(data: StockHistoryPoint[]): number | null {
+  if (data.length === 0) return null
+  const oneYearAgo = (data[data.length - 1].timestamp) - 365 * 24 * 60 * 60
+  const slice = data.filter((d) => d.timestamp >= oneYearAgo)
+  if (slice.length === 0) return null
+  return slice.reduce((sum, d) => sum + d.close, 0) / slice.length
+}
+
 /** Returns avg volume over the last 7 completed trading sessions. */
 function get7DayAvgVolume(data: StockHistoryPoint[]): number | null {
   if (data.length < 2) return null
@@ -230,6 +238,7 @@ export function WatchlistTab() {
   const sparklineMap = new Map<string, number[]>()
   const daysAtPriceMap = new Map<string, number | null>()
   const volAvgMap = new Map<string, number | null>()
+  const avgPriceMap = new Map<string, number | null>()
   if (histories) {
     for (const h of histories) {
       metricsMap.set(h.symbol, computeChangeMetrics(h.data))
@@ -237,6 +246,7 @@ export function WatchlistTab() {
       const currentPrice = livePriceMap.get(h.symbol)?.price ?? 0
       daysAtPriceMap.set(h.symbol, computeDaysAtCurrentPrice(currentPrice, h.data))
       volAvgMap.set(h.symbol, get7DayAvgVolume(h.data))
+      avgPriceMap.set(h.symbol, get1YAvgPrice(h.data))
     }
   }
 
@@ -335,97 +345,106 @@ export function WatchlistTab() {
         />
       ) : (
         <>
-          {/* ── Mobile tiles (< sm) ────────────────────────────────────── */}
-          <div className="sm:hidden space-y-3">
+          {/* ── Mobile grid (< sm) — 3 per row ────────────────────────── */}
+          <div className="sm:hidden grid grid-cols-2 gap-2">
             {isDataLoading
               ? symbols.map((symbol) => (
-                  <div key={symbol} className="rounded-lg border p-3 space-y-3">
-                    <div className="flex items-start justify-between gap-2">
-                      <div className="space-y-1.5">
-                        <div className="font-semibold">{symbol}</div>
-                        <Skeleton className="h-4 w-16" />
-                      </div>
-                      <Skeleton className="h-5 w-24" />
+                  <div key={symbol} className="rounded-xl border p-2.5 space-y-2.5">
+                    <div className="flex items-center justify-between">
+                      <span className="font-bold text-xs">{symbol}</span>
                     </div>
-                    <div className="grid grid-cols-4 gap-2">
-                      {SHORT_METRIC_KEYS.map((key) => (
-                        <div key={key} className="space-y-1">
-                          <Skeleton className="h-3 w-8" />
-                          <Skeleton className="h-4 w-10" />
-                        </div>
-                      ))}
+                    <Skeleton className="h-4 w-full" />
+                    <Skeleton className="h-3 w-3/4" />
+                    <div className="space-y-1.5 pt-1 border-t">
+                      <Skeleton className="h-3 w-full" />
+                      <Skeleton className="h-3 w-full" />
+                      <Skeleton className="h-3 w-2/3" />
                     </div>
                   </div>
                 ))
-              : symbols.map((symbol, i) => {
+              : symbols.map((symbol) => {
                   const lp = livePriceMap.get(symbol)
                   const metrics = metricsMap.get(symbol)
                   const price = lp?.price ?? 0
+                  const high = lp?.dayHigh ?? 0
+                  const low = lp?.dayLow ?? 0
+                  const avg = avgPriceMap.get(symbol) ?? null
+                  const dod = metrics?.dod
                   const isAlerting = alertPrices.has(symbol)
                   const refPrice = alertPrices.get(symbol)
+
+                  const fmt = (n: number) => n.toLocaleString("en-PK", { minimumFractionDigits: 2, maximumFractionDigits: 2 })
+                  const pct = (n: number) => `${n >= 0 ? "+" : ""}${n.toFixed(2)}%`
+
+                  const highPct = price > 0 && high > 0 ? ((high - price) / price) * 100 : null
+                  const lowPct = price > 0 && low > 0 ? ((low - price) / price) * 100 : null
+                  const avgPct = price > 0 && avg ? ((price - avg) / avg) * 100 : null
+
+                  const int = (n: number) => Math.round(n).toLocaleString("en-PK")
+                  const liveVol = lp?.volume ?? 0
+                  const avgVol = volAvgMap.get(symbol) ?? null
+                  const volPct = liveVol > 0 && avgVol && avgVol > 0
+                    ? ((liveVol - avgVol) / avgVol) * 100
+                    : null
+
                   return (
-                    <div key={symbol} className="rounded-lg border p-3 space-y-3 text-sm">
-                      {/* Header row */}
-                      <div className="flex items-start justify-between gap-2">
-                        <div>
-                          <div className="flex items-center gap-2">
-                            <span className="font-semibold">{i + 1}. {symbol}</span>
-                            <HiLo high={lp?.dayHigh ?? 0} low={lp?.dayLow ?? 0} />
-                          </div>
-                          <div className="mt-1">
-                            <LastSeenBadge days={daysAtPriceMap.get(symbol) ?? null} />
-                          </div>
-                        </div>
-                        <div className="text-right">
-                          <div className="font-medium tabular-nums">
-                            {price > 0
-                              ? `PKR ${price.toLocaleString("en-PK", { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`
-                              : "-"}
-                          </div>
-                          <div className="flex items-center justify-end gap-0.5 mt-1">
-                            <button
-                              onClick={() => toggleAlert(symbol, price)}
-                              className={`p-1 rounded-md transition-colors ${
-                                isAlerting
-                                  ? "text-yellow-500"
-                                  : "text-muted-foreground/50"
-                              }`}
-                              title={
-                                isAlerting
-                                  ? `Alert active — ref PKR ${refPrice?.toLocaleString("en-PK", { minimumFractionDigits: 2 })} (±${ALERT_THRESHOLD}%)`
-                                  : `Set price alert (±${ALERT_THRESHOLD}% from current)`
-                              }
-                            >
-                              {isAlerting ? <BellRing className="h-3.5 w-3.5" /> : <Bell className="h-3.5 w-3.5" />}
-                            </button>
-                            <button
-                              onClick={() => handleRemove(symbol)}
-                              className="p-1 rounded-md hover:bg-muted"
-                            >
-                              <X className="h-3.5 w-3.5 text-muted-foreground" />
-                            </button>
-                          </div>
+                    <div key={symbol} className="rounded-xl border p-2 space-y-1.5 text-[10px]">
+
+                      {/* Symbol + actions */}
+                      <div className="flex items-center justify-between gap-0.5">
+                        <span className="font-bold text-[11px] truncate">{symbol}</span>
+                        <div className="flex shrink-0">
+                          <button
+                            onClick={() => toggleAlert(symbol, price)}
+                            className={`p-0.5 rounded transition-colors ${isAlerting ? "text-yellow-500" : "text-muted-foreground/40"}`}
+                            title={isAlerting ? `Alert active — ref PKR ${refPrice?.toLocaleString("en-PK", { minimumFractionDigits: 2 })} (±${ALERT_THRESHOLD}%)` : `Set alert (±${ALERT_THRESHOLD}%)`}
+                          >
+                            {isAlerting ? <BellRing className="h-2.5 w-2.5" /> : <Bell className="h-2.5 w-2.5" />}
+                          </button>
+                          <button onClick={() => handleRemove(symbol)} className="p-0.5 rounded hover:bg-muted">
+                            <X className="h-2.5 w-2.5 text-muted-foreground/40" />
+                          </button>
                         </div>
                       </div>
 
-                      {/* Sparkline */}
-                      <Sparkline points={sparklineMap.get(symbol) ?? []} width={undefined} height={28} />
+                      {/* Price + DoD on same line */}
+                      <div className="flex items-center justify-between tabular-nums">
+                        <span className={`font-semibold text-[11px] ${dod != null ? (dod >= 0 ? "text-green-500" : "text-red-500") : ""}`}>{price > 0 ? `Rs. ${fmt(price)}` : "—"}</span>
+                        {dod != null && (
+                          <span className={dod >= 0 ? "text-green-500" : "text-red-500"}>{pct(dod)}</span>
+                        )}
+                      </div>
 
-                      {/* Short metrics */}
-                      <div className="grid grid-cols-4 gap-x-2 gap-y-1 text-xs">
-                        {SHORT_METRIC_KEYS.map((key) => (
-                          <div key={key}>
-                            <div className="text-muted-foreground mb-0.5">{METRIC_LABELS[key]}</div>
-                            <ChangeCell value={metrics?.[key]} />
+                      {/* H / L */}
+                      <div className="space-y-0.5 border-t pt-1 tabular-nums">
+                        {high > 0 && (
+                          <div className="flex items-center justify-between">
+                            <span className="text-muted-foreground">High</span>
+                            <span className="text-green-500">
+                              Rs. {int(high)}{highPct != null ? ` (+${highPct.toFixed(1)}%)` : ""}
+                            </span>
                           </div>
-                        ))}
+                        )}
+                        {low > 0 && (
+                          <div className="flex items-center justify-between">
+                            <span className="text-muted-foreground">Low</span>
+                            <span className="text-red-500">
+                              Rs. {int(low)}{lowPct != null ? ` (${lowPct.toFixed(1)}%)` : ""}
+                            </span>
+                          </div>
+                        )}
                       </div>
 
-                      {/* Volume vs 7d avg */}
-                      <div className="text-xs border-t pt-2 flex items-center gap-2">
-                        <span className="text-muted-foreground">Vol</span>
-                        <VolumeCell liveVol={lp?.volume ?? 0} avgVol={volAvgMap.get(symbol) ?? null} />
-                      </div>
+                      {/* Vol vs 7D Avg — % only */}
+                      {volPct != null && (
+                        <div className="flex items-center justify-between border-t pt-1">
+                          <span className="text-muted-foreground">Vol vs 7D Avg</span>
+                          <span className={`tabular-nums ${volPct >= 0 ? "text-green-500" : "text-red-500"}`}>
+                            {volPct >= 0 ? "+" : ""}{volPct.toFixed(0)}%
+                          </span>
+                        </div>
+                      )}
+
                     </div>
                   )
                 })}

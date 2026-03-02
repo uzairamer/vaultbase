@@ -19,6 +19,9 @@ import {
   LineChart,
   BarChart,
   FileBarChart2,
+  Eye,
+  Calculator,
+  History,
 } from "lucide-react"
 import {
   Sidebar,
@@ -33,10 +36,14 @@ import {
   SidebarMenuSub,
   SidebarMenuSubButton,
   SidebarMenuSubItem,
+  useSidebar,
 } from "@/components/ui/sidebar"
-import { cn } from "@/lib/utils"
 
-const navItems = [
+type NavLeaf = { title: string; href: string; icon: React.ElementType }
+type NavChild = NavLeaf & { children?: NavLeaf[] }
+type NavItem = NavLeaf & { children?: NavChild[] }
+
+const navItems: NavItem[] = [
   {
     title: "Dashboard",
     href: "/dashboard",
@@ -71,7 +78,18 @@ const navItems = [
     href: "/insights",
     icon: PieChart,
     children: [
-      { title: "Stocks", href: "/insights/stocks", icon: LineChart },
+      {
+        title: "Stocks",
+        href: "/insights/stocks",
+        icon: LineChart,
+        children: [
+          { title: "Overview", href: "/insights/stocks", icon: BarChart3 },
+          { title: "Historical", href: "/insights/stocks/historical", icon: History },
+          { title: "Heatmap", href: "/insights/stocks/heatmap", icon: BarChart },
+          { title: "Watchlist", href: "/insights/stocks/watchlist", icon: Eye },
+          { title: "SIP Simulator", href: "/insights/stocks/sip", icon: Calculator },
+        ],
+      },
       { title: "Commodities", href: "/insights/commodities", icon: BarChart },
       { title: "Expenses", href: "/insights/expenses", icon: PieChart },
     ],
@@ -80,6 +98,7 @@ const navItems = [
 
 export function AppSidebar() {
   const pathname = usePathname()
+  const { setOpenMobile } = useSidebar()
 
   return (
     <Sidebar>
@@ -103,7 +122,7 @@ export function AppSidebar() {
                     isActive={pathname === item.href}
                     tooltip={item.title}
                   >
-                    <Link href={item.href}>
+                    <Link href={item.href} onClick={() => setOpenMobile(false)}>
                       <item.icon className="h-4 w-4" />
                       <span>{item.title}</span>
                     </Link>
@@ -114,13 +133,34 @@ export function AppSidebar() {
                         <SidebarMenuSubItem key={child.href}>
                           <SidebarMenuSubButton
                             asChild
-                            isActive={pathname === child.href}
+                            isActive={
+                              child.children
+                                ? pathname.startsWith(child.href)
+                                : pathname === child.href
+                            }
                           >
-                            <Link href={child.href}>
+                            <Link href={child.href} onClick={() => setOpenMobile(false)}>
                               <child.icon className="h-3.5 w-3.5" />
                               <span>{child.title}</span>
                             </Link>
                           </SidebarMenuSubButton>
+                          {child.children && (
+                            <SidebarMenuSub>
+                              {child.children.map((grandchild) => (
+                                <SidebarMenuSubItem key={grandchild.href}>
+                                  <SidebarMenuSubButton
+                                    asChild
+                                    isActive={pathname === grandchild.href}
+                                  >
+                                    <Link href={grandchild.href} onClick={() => setOpenMobile(false)}>
+                                      <grandchild.icon className="h-3 w-3" />
+                                      <span>{grandchild.title}</span>
+                                    </Link>
+                                  </SidebarMenuSubButton>
+                                </SidebarMenuSubItem>
+                              ))}
+                            </SidebarMenuSub>
+                          )}
                         </SidebarMenuSubItem>
                       ))}
                     </SidebarMenuSub>

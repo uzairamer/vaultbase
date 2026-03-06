@@ -1,5 +1,5 @@
 import type { Metadata } from "next"
-import { Martel_Sans } from "next/font/google"
+import { Host_Grotesk, Martel_Sans } from "next/font/google"
 import "./globals.css"
 import { AuthSessionProvider } from "@/providers/session-provider"
 import { QueryProvider } from "@/providers/query-provider"
@@ -7,7 +7,17 @@ import { ThemeProvider } from "@/providers/theme-provider"
 import { TooltipProvider } from "@/components/ui/tooltip"
 import { Toaster } from "sonner"
 
-const martelSans = Martel_Sans({ subsets: ["latin"], weight: ["200", "300", "400", "600", "700", "800", "900"] })
+const hostGrotesk = Host_Grotesk({
+  subsets: ["latin"],
+  style: ["normal", "italic"],
+  variable: "--font-host-grotesk",
+})
+
+const martelSans = Martel_Sans({
+  subsets: ["latin"],
+  weight: ["200", "300", "400", "600", "700", "800", "900"],
+  variable: "--font-martel-sans",
+})
 
 export const metadata: Metadata = {
   title: "Vaultbase — Personal Wealth Management",
@@ -17,7 +27,7 @@ export const metadata: Metadata = {
 export default function RootLayout({ children }: { children: React.ReactNode }) {
   return (
     <html lang="en" className="dark" suppressHydrationWarning>
-      <body className={martelSans.className}>
+      <body className={`${hostGrotesk.className} ${martelSans.variable}`}>
         <AuthSessionProvider>
           <QueryProvider>
             <ThemeProvider>

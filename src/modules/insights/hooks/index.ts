@@ -162,6 +162,7 @@ export function useRoundRobinPrices(symbols: string[]) {
   const [prices, setPrices] = useState<Map<string, LivePrice>>(new Map())
   const [isLoading, setIsLoading] = useState(false)
   const [isFetching, setIsFetching] = useState(false)
+  const [fetchingSymbol, setFetchingSymbol] = useState<string | null>(null)
   const indexRef = useRef(0)
   const symbolsRef = useRef(symbols)
   useEffect(() => { symbolsRef.current = symbols }, [symbols])
@@ -192,13 +193,15 @@ export function useRoundRobinPrices(symbols: string[]) {
       const sym = syms[indexRef.current % syms.length]
       indexRef.current = (indexRef.current + 1) % syms.length
       setIsFetching(true)
+      setFetchingSymbol(sym)
       const lp = await fetchLivePrice(sym)
       setPrices((prev) => { const next = new Map(prev); next.set(sym, lp); return next })
       setIsFetching(false)
+      setFetchingSymbol(null)
     }, 1500)
     return () => clearInterval(id)
   }, []) // intentionally empty — symbolsRef always holds the latest list
 
   const data = useMemo(() => Array.from(prices.values()), [prices])
-  return { data, isLoading, isFetching }
+  return { data, isLoading, isFetching, fetchingSymbol }
 }

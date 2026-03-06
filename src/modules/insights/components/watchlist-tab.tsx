@@ -7,7 +7,8 @@ import { Skeleton } from "@/components/ui/skeleton"
 import { EmptyState } from "@/components/shared/empty-state"
 import { Dialog, DialogContent, DialogHeader, DialogTitle } from "@/components/ui/dialog"
 import { Label } from "@/components/ui/label"
-import { Plus, Loader2, Eye, X, Bell, BellRing, BellDot } from "lucide-react"
+import { Tooltip, TooltipContent, TooltipTrigger } from "@/components/ui/tooltip"
+import { Plus, Loader2, Eye, X, Bell, BellRing, BellDot, Sparkles } from "lucide-react"
 import { toast } from "sonner"
 import { formatPercent } from "@/lib/utils"
 import {
@@ -25,7 +26,7 @@ import { METRIC_LABELS } from "../utils/compute-changes"
 import type { StockHistoryPoint } from "../hooks"
 
 // Only DoD, WoW, MoM, YTD shown as individual columns; multi-year rolled into YoxY
-const SHORT_METRIC_KEYS: (keyof ChangeMetrics)[] = ["dod", "wow", "mom", "ytd"]
+const SHORT_METRIC_KEYS: (keyof ChangeMetrics)[] = ["wow", "mom", "ytd"]
 
 function ChangeCell({ value }: { value: number | null | undefined }) {
   if (value === null || value === undefined) {
@@ -115,7 +116,7 @@ function LastSeenBadge({ days }: { days: number | null }) {
   if (days === null) {
     return (
       <span
-        className="inline-flex items-center rounded px-1.5 py-0.5 text-[10px] font-medium bg-purple-500/10 text-purple-400"
+        className="inline-flex items-center rounded px-1.5 py-0.5 text-sm font-medium bg-purple-500/10 text-purple-400"
         title="Price not seen before in available history at this level (±1% range)"
       >
         ATL
@@ -140,7 +141,7 @@ function LastSeenBadge({ days }: { days: number | null }) {
 
   return (
     <span
-      className={`inline-flex items-center rounded px-1.5 py-0.5 text-[10px] font-medium ${cls}`}
+      className={`inline-flex items-center rounded px-1.5 py-0.5 text-sm font-medium ${cls}`}
       title={`${dateStr} (~${days}d ago, ±1% range)`}
     >
       {formatDaysAgo(days)}
@@ -177,7 +178,7 @@ function HiLo({ high, low, price }: { high: number; low: number; price: number }
   const highPct = price > 0 ? ((high - price) / price) * 100 : null
   const lowPct = price > 0 ? ((low - price) / price) * 100 : null
   return (
-    <span className="tabular-nums text-xs space-y-0.5 block text-right">
+    <span className="tabular-nums text-sm space-y-0.5 block text-right">
       <span className="block text-green-500">
         {fmt(high)}{highPct != null ? <span className="ml-1 opacity-70">(+{highPct.toFixed(1)}%)</span> : null}
       </span>
@@ -203,15 +204,47 @@ function VolumeCell({ liveVol, avgVol }: { liveVol: number; avgVol: number | nul
   const tooltip = `Today: ${liveVol.toLocaleString("en-PK")} | 7d avg: ${Math.round(avgVol).toLocaleString("en-PK")}`
   return (
     <span className={`tabular-nums ${color}`} title={tooltip}>
-      {sign}{pct.toFixed(0)}% avg
+      {sign}{pct.toFixed(0)}%
     </span>
   )
+}
+
+function playAlertChime(up: boolean) {
+  if (typeof window === "undefined") return
+  try {
+    const ctx = new AudioContext()
+    const gain = ctx.createGain()
+    gain.connect(ctx.destination)
+
+    // Two-note chime: root then fifth up (up alert) or root then minor third down (down alert)
+    const notes = up
+      ? [{ freq: 880, start: 0 }, { freq: 1320, start: 0.12 }]   // A5 → E6
+      : [{ freq: 880, start: 0 }, { freq: 698, start: 0.12 }]    // A5 → F5
+
+    for (const { freq, start } of notes) {
+      const osc = ctx.createOscillator()
+      const env = ctx.createGain()
+      osc.type = "sine"
+      osc.frequency.value = freq
+      osc.connect(env)
+      env.connect(gain)
+      env.gain.setValueAtTime(0, ctx.currentTime + start)
+      env.gain.linearRampToValueAtTime(0.25, ctx.currentTime + start + 0.01)
+      env.gain.exponentialRampToValueAtTime(0.001, ctx.currentTime + start + 0.35)
+      osc.start(ctx.currentTime + start)
+      osc.stop(ctx.currentTime + start + 0.35)
+    }
+  } catch {
+    // AudioContext not available — silently skip
+  }
 }
 
 function sendNotification(symbol: string, changePct: number, price: number) {
   const sign = changePct >= 0 ? "+" : ""
   const priceStr = price.toLocaleString("en-PK", { minimumFractionDigits: 2, maximumFractionDigits: 2 })
   const msg = `${symbol} ${sign}${changePct.toFixed(2)}% — PKR ${priceStr}`
+
+  playAlertChime(changePct >= 0)
 
   if (changePct >= 0) {
     toast.success(`Price alert: ${msg}`, { duration: 15000 })
@@ -226,6 +259,34 @@ function sendNotification(symbol: string, changePct: number, price: number) {
 
 type AlertEntry = { refPrice: number; threshold: number }
 
+function ColHeader({ label, full, description, formula }: {
+  label: string
+  full?: string
+  description: string
+  formula?: string
+}) {
+  return (
+    <Tooltip>
+      <TooltipTrigger asChild>
+        <span className="cursor-help underline decoration-dashed decoration-muted-foreground/40 underline-offset-2">
+          {label}
+        </span>
+      </TooltipTrigger>
+      <TooltipContent side="top" className="max-w-60 space-y-1">
+        {full && <p className="font-semibold text-xs">{full}</p>}
+        <p className="text-xs text-muted-foreground">{description}</p>
+        {formula && <p className="font-mono text-[10px] text-muted-foreground/70 pt-0.5 border-t border-border mt-1">{formula}</p>}
+      </TooltipContent>
+    </Tooltip>
+  )
+}
+
+const METRIC_TOOLTIPS: Partial<Record<keyof ChangeMetrics, { full: string; description: string; formula: string }>> = {
+  wow: { full: "Week over Week", description: "Price change over the past 7 calendar days.", formula: "(Price − Price₋₇d) ÷ Price₋₇d × 100" },
+  mom: { full: "Month over Month", description: "Price change over the past 30 calendar days.", formula: "(Price − Price₋₃₀d) ÷ Price₋₃₀d × 100" },
+  ytd: { full: "Year to Date", description: "Price change since January 1st of the current year.", formula: "(Price − PriceJan₁) ÷ PriceJan₁ × 100" },
+}
+
 export function WatchlistTab() {
   const [symbolInput, setSymbolInput] = useState("")
   const [alertPrices, setAlertPrices] = useState<Map<string, AlertEntry>>(() => {
@@ -239,6 +300,10 @@ export function WatchlistTab() {
   const [alertDialog, setAlertDialog] = useState<{ symbol: string; price: number } | { symbol: "__all__"; price: 0 } | null>(null)
   const [thresholdInput, setThresholdInput] = useState("0.5")
   const firedRef = useRef<Set<string>>(new Set())
+  const [showFetchGlow, setShowFetchGlow] = useState(true)
+  const [glowingSymbols, setGlowingSymbols] = useState<Map<string, "active" | "fadeout">>(new Map())
+  const glowTimersRef = useRef<Map<string, ReturnType<typeof setTimeout>>>(new Map())
+  const prevFetchingRef = useRef<string | null>(null)
   const [flashMap, setFlashMap] = useState<Map<string, "up" | "down">>(new Map())
   const prevPricesRef = useRef<Map<string, number>>(new Map())
   const flashTimersRef = useRef<Map<string, ReturnType<typeof setTimeout>>>(new Map())
@@ -254,7 +319,7 @@ export function WatchlistTab() {
 
   const symbols = ((watchlistItems as WatchlistItem[]) ?? []).map((item) => item.symbol)
 
-  const { data: livePrices, isLoading: livePricesLoading, isFetching: livePricesFetching } = useRoundRobinPrices(symbols)
+  const { data: livePrices, isLoading: livePricesLoading, isFetching: livePricesFetching, fetchingSymbol } = useRoundRobinPrices(symbols)
   const { data: histories, isLoading: historiesLoading } = useStockHistories(symbols, "max")
 
   // Flash price cells when prices change after a fetch
@@ -286,6 +351,36 @@ export function WatchlistTab() {
     return () => { for (const t of flashTimersRef.current.values()) clearTimeout(t) }
   }, [])
 
+  // Fade-in → spin → fade-out glow lifecycle
+  useEffect(() => {
+    const prev = prevFetchingRef.current
+    const curr = fetchingSymbol
+
+    if (curr && curr !== prev) {
+      // Cancel any pending fade-out for this symbol
+      const existing = glowTimersRef.current.get(curr)
+      if (existing) { clearTimeout(existing); glowTimersRef.current.delete(curr) }
+      setGlowingSymbols((m) => { const n = new Map(m); n.set(curr, "active"); return n })
+    }
+
+    if (prev && prev !== curr) {
+      // Switch to fade-out, then remove
+      setGlowingSymbols((m) => { const n = new Map(m); n.set(prev, "fadeout"); return n })
+      const t = setTimeout(() => {
+        setGlowingSymbols((m) => { const n = new Map(m); n.delete(prev); return n })
+        glowTimersRef.current.delete(prev)
+      }, 500)
+      glowTimersRef.current.set(prev, t)
+    }
+
+    prevFetchingRef.current = curr
+  }, [fetchingSymbol])
+
+  // Cleanup glow timers on unmount
+  useEffect(() => {
+    return () => { for (const t of glowTimersRef.current.values()) clearTimeout(t) }
+  }, [])
+
   const livePriceMap = new Map<string, LivePrice>()
   if (livePrices) {
     for (const lp of livePrices) {
@@ -298,6 +393,7 @@ export function WatchlistTab() {
   const daysAtPriceMap = new Map<string, number | null>()
   const volAvgMap = new Map<string, number | null>()
   const avgPriceMap = new Map<string, number | null>()
+  const ldcpMap = new Map<string, number>()
   if (histories) {
     for (const h of histories) {
       metricsMap.set(h.symbol, computeChangeMetrics(h.data))
@@ -306,6 +402,7 @@ export function WatchlistTab() {
       daysAtPriceMap.set(h.symbol, computeDaysAtCurrentPrice(currentPrice, h.data))
       volAvgMap.set(h.symbol, get7DayAvgVolume(h.data))
       avgPriceMap.set(h.symbol, get1YAvgPrice(h.data))
+      ldcpMap.set(h.symbol, h.data.length > 0 ? h.data[h.data.length - 1].close : 0)
     }
   }
 
@@ -364,6 +461,7 @@ export function WatchlistTab() {
   }
 
   const fireTestAlert = async () => {
+    playAlertChime(true)
     // Toast always works — fire it immediately
     toast.success("Price alert: LUCK +2.50% — PKR 155.00 (test)", { duration: 15000 })
 
@@ -447,6 +545,16 @@ export function WatchlistTab() {
               Alert All
             </Button>
           )}
+          <Button
+            size="sm"
+            variant="outline"
+            onClick={() => setShowFetchGlow((v) => !v)}
+            title={showFetchGlow ? "Disable fetch glow" : "Enable fetch glow"}
+            className={showFetchGlow ? "border-yellow-500/50 text-yellow-500 hover:text-yellow-400" : ""}
+          >
+            <Sparkles className="h-3.5 w-3.5 mr-1.5" />
+            Glow
+          </Button>
           <Button size="sm" variant="outline" onClick={fireTestAlert} title="Send a test notification to verify alerts are working">
             <BellDot className="h-3.5 w-3.5 mr-1.5" />
             Test Alert
@@ -486,7 +594,8 @@ export function WatchlistTab() {
                   const high = lp?.dayHigh ?? 0
                   const low = lp?.dayLow ?? 0
                   const avg = avgPriceMap.get(symbol) ?? null
-                  const dod = metrics?.dod
+                  const ldcp = ldcpMap.get(symbol) ?? 0
+                  const dod = ldcp > 0 && price > 0 ? ((price - ldcp) / ldcp) * 100 : null
                   const isAlerting = alertPrices.has(symbol)
                   const alertEntry = alertPrices.get(symbol)
 
@@ -507,46 +616,61 @@ export function WatchlistTab() {
                   return (
                     <div
                       key={symbol}
-                      className="rounded-xl border p-2 space-y-1.5 text-[10px]"
-                      style={flashMap.get(symbol) === "up" ? { animation: "price-flash-up 2s ease-out forwards" } : flashMap.get(symbol) === "down" ? { animation: "price-flash-down 2s ease-out forwards" } : undefined}
+                      className="rounded-xl border p-3 space-y-2 text-xs"
+                      style={(() => {
+                        const glow = showFetchGlow ? glowingSymbols.get(symbol) : undefined
+                        if (glow === "active") return { animation: "fetch-gold-fadein 0.3s ease-out forwards, fetch-gold-spin 1.2s 0.3s linear infinite" }
+                        if (glow === "fadeout") return { animation: "fetch-gold-fadeout 0.5s ease-in forwards" }
+                        if (flashMap.get(symbol) === "up") return { animation: "price-flash-up 2s ease-out forwards" }
+                        if (flashMap.get(symbol) === "down") return { animation: "price-flash-down 2s ease-out forwards" }
+                        return undefined
+                      })()}
                     >
 
                       {/* Symbol + actions */}
                       <div className="flex items-center justify-between gap-0.5">
-                        <span className="font-bold text-[11px] truncate">{symbol}</span>
+                        <span className="font-bold text-sm truncate">{symbol}</span>
                         <div className="flex shrink-0">
                           {isAlerting ? (
                             <button
                               onClick={() => removeAlert(symbol)}
-                              className="p-0.5 rounded transition-colors text-yellow-500"
+                              className="p-1 rounded transition-colors text-yellow-500"
                               title={`Alert active — ref PKR ${alertEntry?.refPrice.toLocaleString("en-PK", { minimumFractionDigits: 2 })} (±${alertEntry?.threshold}%) — click to remove`}
                             >
-                              <BellRing className="h-2.5 w-2.5" />
+                              <BellRing className="h-3.5 w-3.5" />
                             </button>
                           ) : (
                             <button
                               onClick={() => openAlertDialog(symbol, price)}
-                              className="p-0.5 rounded transition-colors text-muted-foreground/40"
+                              className="p-1 rounded transition-colors text-muted-foreground/40"
                               title="Set price alert"
                             >
-                              <Bell className="h-2.5 w-2.5" />
+                              <Bell className="h-3.5 w-3.5" />
                             </button>
                           )}
-                          <button onClick={() => handleRemove(symbol)} className="p-0.5 rounded hover:bg-muted">
-                            <X className="h-2.5 w-2.5 text-muted-foreground/40" />
+                          <button onClick={() => handleRemove(symbol)} className="p-1 rounded hover:bg-muted">
+                            <X className="h-3.5 w-3.5 text-muted-foreground/40" />
                           </button>
                         </div>
                       </div>
 
-                      {/* Price + DoD on same line */}
-                      <div className="flex items-center justify-between tabular-nums">
-                        <span
-                          className={`font-semibold text-[11px] rounded px-0.5 ${dod != null ? (dod >= 0 ? "text-green-500" : "text-red-500") : ""}`}
-                        >{price > 0 ? `Rs. ${fmt(price)}` : "—"}</span>
-                        {dod != null && (
-                          <span className={dod >= 0 ? "text-green-500" : "text-red-500"}>{pct(dod)}</span>
-                        )}
+                      {/* Price + DoD inline */}
+                      <div className="tabular-nums">
+                        <span className={`font-semibold text-sm ${dod != null ? (dod >= 0 ? "text-green-500" : "text-red-500") : ""}`}>
+                          {price > 0 ? `Rs. ${fmt(price)}` : "—"}
+                          {dod != null && (
+                            <span className="ml-1 font-normal opacity-80">({dod >= 0 ? "+" : ""}{dod.toFixed(2)}%)</span>
+                          )}
+                        </span>
                       </div>
+
+                      {/* LDCP */}
+                      {ldcp > 0 && (
+                        <div className="flex items-center justify-between border-t pt-1 tabular-nums">
+                          <span className="text-muted-foreground">LDCP</span>
+                          <span>Rs. {fmt(ldcp)}</span>
+                        </div>
+                      )}
 
                       {/* H / L */}
                       <div className="space-y-0.5 border-t pt-1 tabular-nums">
@@ -568,13 +692,27 @@ export function WatchlistTab() {
                         )}
                       </div>
 
-                      {/* Vol vs 7D Avg — % only */}
+                      {/* Vol vs 7D Avg + RVOL */}
                       {volPct != null && (
-                        <div className="flex items-center justify-between border-t pt-1">
-                          <span className="text-muted-foreground">Vol vs 7D Avg</span>
-                          <span className={`tabular-nums ${volPct >= 0 ? "text-green-500" : "text-red-500"}`}>
-                            {volPct >= 0 ? "+" : ""}{volPct.toFixed(0)}%
-                          </span>
+                        <div className="space-y-0.5 border-t pt-1">
+                          <div className="flex items-center justify-between">
+                            <span className="text-muted-foreground">Vol vs 7D Avg</span>
+                            <span className={`tabular-nums ${volPct >= 0 ? "text-green-500" : "text-red-500"}`}>
+                              {volPct >= 0 ? "+" : ""}{volPct.toFixed(0)}%
+                            </span>
+                          </div>
+                          {(() => {
+                            const avgVol = volAvgMap.get(symbol) ?? null
+                            if (!liveVol || !avgVol || avgVol === 0) return null
+                            const rvol = liveVol / avgVol
+                            const color = rvol >= 2 ? "text-green-500" : rvol >= 1 ? "" : "text-muted-foreground"
+                            return (
+                              <div className="flex items-center justify-between">
+                                <span className="text-muted-foreground">RVOL</span>
+                                <span className={`tabular-nums ${color}`}>{rvol.toFixed(2)}x</span>
+                              </div>
+                            )
+                          })()}
                         </div>
                       )}
 
@@ -586,22 +724,45 @@ export function WatchlistTab() {
           {/* ── Desktop table (≥ sm) ───────────────────────────────────── */}
           <div className="hidden sm:block rounded-lg border overflow-hidden">
             <div className="overflow-x-auto">
-              <table className="w-full text-sm">
+              <table className="w-full text-base">
                 <thead>
                   <tr className="border-b bg-muted/50">
                     <th className="text-left font-medium text-muted-foreground px-2 py-2.5 w-8">#</th>
                     <th className="text-left font-medium text-muted-foreground px-2 py-2.5">Name</th>
-                    <th className="text-right font-medium text-muted-foreground px-2 py-2.5">Price</th>
-                    <th className="text-right font-medium text-muted-foreground px-2 py-2.5 hidden md:table-cell">H / L</th>
-                    <th className="text-right font-medium text-muted-foreground px-2 py-2.5" title="Last time price was within ±1% of current">Last seen</th>
-                    {SHORT_METRIC_KEYS.map((key) => (
-                      <th key={key} className="text-right font-medium text-muted-foreground px-1.5 py-2.5">
-                        {METRIC_LABELS[key]}
-                      </th>
-                    ))}
-                    <th className="text-right font-medium text-muted-foreground px-1.5 py-2.5" title="Hover to see 2Y, 3Y, 4Y, 5Y, All">YoxY</th>
-                    <th className="text-right font-medium text-muted-foreground px-2 py-2.5 hidden lg:table-cell">Volume</th>
-                    <th className="text-right font-medium text-muted-foreground px-2 py-2.5 hidden md:table-cell">Last 7d</th>
+                    <th className="text-right font-medium text-muted-foreground px-2 py-2.5">
+                      <ColHeader label="Price (DoD)" full="Price with Day-over-Day Change" description="Current market price alongside its percentage change since the previous session's close." formula="(Price − LDCP) ÷ LDCP × 100" />
+                    </th>
+                    <th className="text-right font-medium text-muted-foreground px-2 py-2.5 hidden md:table-cell">
+                      <ColHeader label="LDCP" full="Last Day Closing Price" description="The official closing price of the most recent completed trading session." />
+                    </th>
+                    <th className="text-right font-medium text-muted-foreground px-2 py-2.5 hidden md:table-cell">
+                      <ColHeader label="H / L" full="Day High / Day Low" description="The highest and lowest prices traded in today's session, with percentage distance from current price." />
+                    </th>
+                    <th className="text-right font-medium text-muted-foreground px-2 py-2.5">
+                      <ColHeader label="Last seen" full="Last Seen at This Price" description="How long ago the stock last traded within ±1% of its current price. Longer = more unusual level." />
+                    </th>
+                    {SHORT_METRIC_KEYS.map((key) => {
+                      const tip = METRIC_TOOLTIPS[key]
+                      return (
+                        <th key={key} className="text-right font-medium text-muted-foreground px-1.5 py-2.5">
+                          {tip
+                            ? <ColHeader label={METRIC_LABELS[key]} full={tip.full} description={tip.description} formula={tip.formula} />
+                            : METRIC_LABELS[key]}
+                        </th>
+                      )
+                    })}
+                    <th className="text-right font-medium text-muted-foreground px-1.5 py-2.5">
+                      <ColHeader label="YoxY" full="Year-over-Year (Multi-Year)" description="Annual return from 1 to 5 years ago plus all-time. Hover the value to expand." formula="(Price − Priceₙ years ago) ÷ Priceₙ years ago × 100" />
+                    </th>
+                    <th className="text-right font-medium text-muted-foreground px-2 py-2.5 hidden lg:table-cell">
+                      <ColHeader label="RVOL" full="Relative Volume" description="Today's volume relative to the 7-session average. Above 2x signals elevated activity." formula="Today's Volume ÷ 7D Avg Volume" />
+                    </th>
+                    <th className="text-right font-medium text-muted-foreground px-2 py-2.5 hidden lg:table-cell">
+                      <ColHeader label="Vol vs 7D Avg" full="Volume vs 7-Day Average" description="Percentage difference between today's volume and the average of the last 7 sessions." formula="(Today's Volume − 7D Avg) ÷ 7D Avg × 100" />
+                    </th>
+                    <th className="text-right font-medium text-muted-foreground px-2 py-2.5 hidden md:table-cell">
+                      <ColHeader label="Last 7d" full="Last 7 Trading Days" description="Sparkline of closing prices over the past 7 completed trading sessions." />
+                    </th>
                     <th className="w-16 px-2 py-2.5" />
                   </tr>
                 </thead>
@@ -611,7 +772,8 @@ export function WatchlistTab() {
                         <tr key={symbol} className="border-b last:border-b-0">
                           <td className="px-2 py-2.5 text-muted-foreground">{i + 1}</td>
                           <td className="px-2 py-2.5 font-medium">{symbol}</td>
-                          <td className="px-2 py-2.5 text-right"><Skeleton className="h-4 w-20 ml-auto" /></td>
+                          <td className="px-2 py-2.5 text-right"><Skeleton className="h-4 w-24 ml-auto" /></td>
+                          <td className="px-2 py-2.5 text-right hidden md:table-cell"><Skeleton className="h-4 w-16 ml-auto" /></td>
                           <td className="px-2 py-2.5 text-right hidden md:table-cell"><Skeleton className="h-4 w-24 ml-auto" /></td>
                           <td className="px-2 py-2.5 text-right"><Skeleton className="h-4 w-16 ml-auto" /></td>
                           {SHORT_METRIC_KEYS.map((key) => (
@@ -622,6 +784,7 @@ export function WatchlistTab() {
                           <td className="px-1.5 py-2.5 text-right">
                             <Skeleton className="h-4 w-12 ml-auto" />
                           </td>
+                          <td className="px-2 py-2.5 text-right hidden lg:table-cell"><Skeleton className="h-4 w-12 ml-auto" /></td>
                           <td className="px-2 py-2.5 text-right hidden lg:table-cell"><Skeleton className="h-4 w-20 ml-auto" /></td>
                           <td className="px-2 py-2.5 text-right hidden md:table-cell"><Skeleton className="h-8 w-[100px] ml-auto" /></td>
                           <td className="px-2 py-2.5" />
@@ -632,36 +795,65 @@ export function WatchlistTab() {
                         const metrics = metricsMap.get(symbol)
                         const price = lp?.price ?? 0
                         const volume = lp?.volume ?? 0
+                        const ldcp = ldcpMap.get(symbol) ?? 0
+                        const dod = ldcp > 0 && price > 0 ? ((price - ldcp) / ldcp) * 100 : null
                         const isAlerting = alertPrices.has(symbol)
                         const alertEntry = alertPrices.get(symbol)
+                        const fmtPrice = (n: number) => n.toLocaleString("en-PK", { minimumFractionDigits: 2, maximumFractionDigits: 2 })
                         return (
                           <tr
                             key={symbol}
                             className="border-b last:border-b-0 group hover:bg-muted/30"
-                            style={flashMap.get(symbol) === "up" ? { animation: "price-flash-up 2s ease-out forwards" } : flashMap.get(symbol) === "down" ? { animation: "price-flash-down 2s ease-out forwards" } : undefined}
+                            style={(() => {
+                              const glow = showFetchGlow ? glowingSymbols.get(symbol) : undefined
+                              if (glow === "active") return { animation: "fetch-gold-fadein 0.3s ease-out forwards, fetch-gold-spin 1.2s 0.3s linear infinite" }
+                              if (glow === "fadeout") return { animation: "fetch-gold-fadeout 0.5s ease-in forwards" }
+                              if (flashMap.get(symbol) === "up") return { animation: "price-flash-up 2s ease-out forwards" }
+                              if (flashMap.get(symbol) === "down") return { animation: "price-flash-down 2s ease-out forwards" }
+                              return undefined
+                            })()}
                           >
                             <td className="px-2 py-2.5 text-muted-foreground tabular-nums">{i + 1}</td>
                             <td className="px-2 py-2.5 font-semibold">{symbol}</td>
-                            <td className="px-2 py-2.5 text-right font-medium tabular-nums">
-                              {price > 0
-                                ? `PKR ${price.toLocaleString("en-PK", { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`
-                                : "-"}
+                            <td className="px-2 py-2.5 text-right tabular-nums whitespace-nowrap">
+                              {price > 0 ? (
+                                <>
+                                  <span className="font-medium">PKR {fmtPrice(price)}</span>
+                                  {dod != null && (
+                                    <span className={`ml-1.5 text-sm ${dod >= 0 ? "text-green-500" : "text-red-500"}`}>
+                                      ({dod >= 0 ? "+" : ""}{dod.toFixed(2)}%)
+                                    </span>
+                                  )}
+                                </>
+                              ) : "-"}
+                            </td>
+                            <td className="px-2 py-2.5 text-right tabular-nums text-sm text-muted-foreground hidden md:table-cell">
+                              {ldcp > 0 ? fmtPrice(ldcp) : <span className="text-muted-foreground/40">—</span>}
                             </td>
                             <td className="px-2 py-2.5 text-right hidden md:table-cell">
                               <HiLo high={lp?.dayHigh ?? 0} low={lp?.dayLow ?? 0} price={price} />
                             </td>
-                            <td className="px-2 py-2.5 text-right tabular-nums text-xs">
+                            <td className="px-2 py-2.5 text-right tabular-nums text-sm">
                               <LastSeenBadge days={daysAtPriceMap.get(symbol) ?? null} />
                             </td>
                             {SHORT_METRIC_KEYS.map((key) => (
-                              <td key={key} className="px-1.5 py-2.5 text-right tabular-nums text-xs">
+                              <td key={key} className="px-1.5 py-2.5 text-right tabular-nums text-sm">
                                 <ChangeCell value={metrics?.[key]} />
                               </td>
                             ))}
-                            <td className="px-1.5 py-2.5 text-right tabular-nums text-xs">
+                            <td className="px-1.5 py-2.5 text-right tabular-nums text-sm">
                               <YoxYCell metrics={metrics} />
                             </td>
-                            <td className="px-2 py-2.5 text-right text-xs hidden lg:table-cell">
+                            <td className="px-2 py-2.5 text-right text-sm tabular-nums hidden lg:table-cell">
+                              {(() => {
+                                const avgVol = volAvgMap.get(symbol) ?? null
+                                if (!volume || !avgVol || avgVol === 0) return <span className="text-muted-foreground/40">—</span>
+                                const rvol = volume / avgVol
+                                const color = rvol >= 2 ? "text-green-500" : rvol >= 1 ? "text-foreground" : "text-muted-foreground"
+                                return <span className={color}>{rvol.toFixed(2)}x</span>
+                              })()}
+                            </td>
+                            <td className="px-2 py-2.5 text-right text-sm hidden lg:table-cell">
                               <VolumeCell liveVol={volume} avgVol={volAvgMap.get(symbol) ?? null} />
                             </td>
                             <td className="px-2 py-2.5 text-right hidden md:table-cell">

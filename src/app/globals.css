@@ -116,6 +116,24 @@
   --sidebar-ring: oklch(0.556 0 0);
 }
 
+@keyframes fetch-gold-fadein {
+  from { box-shadow: 0 0 0 0px rgba(212,175,55,0), 0 0 0px rgba(212,175,55,0); }
+  to   { box-shadow: 0 0 0 1.5px rgba(212,175,55,0.25), 4px 0 10px -2px rgba(212,175,55,0.55); }
+}
+
+@keyframes fetch-gold-spin {
+  0%   { box-shadow: 0 0 0 1.5px rgba(212,175,55,0.25),  4px 0   10px -2px rgba(212,175,55,0.55); }
+  25%  { box-shadow: 0 0 0 1.5px rgba(212,175,55,0.25),  0   4px 10px -2px rgba(212,175,55,0.55); }
+  50%  { box-shadow: 0 0 0 1.5px rgba(212,175,55,0.25), -4px 0   10px -2px rgba(212,175,55,0.55); }
+  75%  { box-shadow: 0 0 0 1.5px rgba(212,175,55,0.25),  0  -4px 10px -2px rgba(212,175,55,0.55); }
+  100% { box-shadow: 0 0 0 1.5px rgba(212,175,55,0.25),  4px 0   10px -2px rgba(212,175,55,0.55); }
+}
+
+@keyframes fetch-gold-fadeout {
+  from { box-shadow: 0 0 0 1.5px rgba(212,175,55,0.25), 0 0 10px -2px rgba(212,175,55,0.55); }
+  to   { box-shadow: 0 0 0 0px rgba(212,175,55,0), 0 0 0px rgba(212,175,55,0); }
+}
+
 @keyframes price-flash-up {
   0%   { background-color: rgba(34, 197, 94, 0.30); }
   20%  { background-color: rgba(34, 197, 94, 0.30); }

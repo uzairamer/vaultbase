@@ -148,23 +148,25 @@ export default function StockOverviewPage() {
           <CardTitle className="text-base">Holdings Summary</CardTitle>
         </CardHeader>
         <CardContent className="space-y-4">
-          <div className="grid grid-cols-3 divide-x rounded-xl border bg-muted/30">
-            <div className="px-4 py-3 text-center">
+          <div className="rounded-xl border bg-muted/30 divide-y sm:divide-y-0 sm:divide-x sm:grid sm:grid-cols-3">
+            <div className="flex items-center justify-between sm:block px-4 py-3 sm:text-center">
               <p className="text-[10px] text-muted-foreground uppercase tracking-wide">Total Invested</p>
-              <p className="text-sm font-bold tabular-nums mt-1">{formatCurrency(totalCost)}</p>
+              <p className="text-sm font-bold tabular-nums sm:mt-1">{formatCurrency(totalCost)}</p>
             </div>
-            <div className="px-4 py-3 text-center">
+            <div className="flex items-center justify-between sm:block px-4 py-3 sm:text-center">
               <p className="text-[10px] text-muted-foreground uppercase tracking-wide">Total P&L</p>
-              <p className={`text-sm font-bold tabular-nums mt-1 ${totalPnl >= 0 ? "text-green-500" : "text-red-500"}`}>
-                {totalPnl >= 0 ? "+" : ""}{formatCurrency(totalPnl)}
-              </p>
-              <p className={`text-[10px] tabular-nums ${totalPnl >= 0 ? "text-green-500" : "text-red-500"}`}>
-                {formatPercent(totalCost > 0 ? (totalPnl / totalCost) * 100 : 0)}
-              </p>
+              <div className="flex items-baseline gap-2 sm:block">
+                <p className={`text-sm font-bold tabular-nums sm:mt-1 ${totalPnl >= 0 ? "text-green-500" : "text-red-500"}`}>
+                  {totalPnl >= 0 ? "+" : ""}{formatCurrency(totalPnl)}
+                </p>
+                <p className={`text-[10px] tabular-nums ${totalPnl >= 0 ? "text-green-500" : "text-red-500"}`}>
+                  {formatPercent(totalCost > 0 ? (totalPnl / totalCost) * 100 : 0)}
+                </p>
+              </div>
             </div>
-            <div className="px-4 py-3 text-center">
+            <div className="flex items-center justify-between sm:block px-4 py-3 sm:text-center">
               <p className="text-[10px] text-muted-foreground uppercase tracking-wide">Current Value</p>
-              <p className="text-sm font-bold tabular-nums mt-1">{formatCurrency(totalValue)}</p>
+              <p className="text-sm font-bold tabular-nums sm:mt-1">{formatCurrency(totalValue)}</p>
             </div>
           </div>
 
@@ -198,25 +200,31 @@ export default function StockOverviewPage() {
                       style={{ width: `${barPct}%` }}
                     />
                   </div>
-                  <div className="grid grid-cols-3 gap-1 text-center">
-                    <div className="rounded-lg bg-muted/50 px-2 py-1.5">
+                  <div className="space-y-1 sm:grid sm:grid-cols-3 sm:gap-1 sm:space-y-0 text-center">
+                    <div className="rounded-lg bg-muted/50 px-2 py-1.5 flex items-center justify-between sm:block">
                       <p className="text-[10px] text-muted-foreground uppercase tracking-wide">Invested</p>
-                      <p className="text-xs font-medium tabular-nums mt-0.5">{formatCurrency(s.cost)}</p>
-                      <p className="text-[10px] text-muted-foreground tabular-nums">{costSharePct.toFixed(1)}% of total</p>
+                      <div className="text-right sm:text-center sm:mt-0.5">
+                        <p className="text-xs font-medium tabular-nums">{formatCurrency(s.cost)}</p>
+                        <p className="text-[10px] text-muted-foreground tabular-nums">{costSharePct.toFixed(1)}% of total</p>
+                      </div>
                     </div>
-                    <div className={`rounded-lg px-2 py-1.5 ${isUp ? "bg-green-500/10" : "bg-red-500/10"}`}>
+                    <div className={`rounded-lg px-2 py-1.5 flex items-center justify-between sm:block ${isUp ? "bg-green-500/10" : "bg-red-500/10"}`}>
                       <p className="text-[10px] text-muted-foreground uppercase tracking-wide">P&L</p>
-                      <p className={`text-xs font-medium tabular-nums mt-0.5 ${isUp ? "text-green-500" : "text-red-500"}`}>
-                        {isUp ? "+" : ""}{formatCurrency(s.pnl)}
-                      </p>
-                      <p className={`text-[10px] tabular-nums ${isUp ? "text-green-500" : "text-red-500"}`}>
-                        {formatPercent(s.pnlPct)}
-                      </p>
+                      <div className="text-right sm:text-center sm:mt-0.5">
+                        <p className={`text-xs font-medium tabular-nums ${isUp ? "text-green-500" : "text-red-500"}`}>
+                          {isUp ? "+" : ""}{formatCurrency(s.pnl)}
+                        </p>
+                        <p className={`text-[10px] tabular-nums ${isUp ? "text-green-500" : "text-red-500"}`}>
+                          {formatPercent(s.pnlPct)}
+                        </p>
+                      </div>
                     </div>
-                    <div className="rounded-lg bg-muted/50 px-2 py-1.5">
+                    <div className="rounded-lg bg-muted/50 px-2 py-1.5 flex items-center justify-between sm:block">
                       <p className="text-[10px] text-muted-foreground uppercase tracking-wide">Value</p>
-                      <p className="text-xs font-medium tabular-nums mt-0.5">{formatCurrency(s.value)}</p>
-                      <p className="text-[10px] text-muted-foreground tabular-nums">{valueSharePct.toFixed(1)}% of total</p>
+                      <div className="text-right sm:text-center sm:mt-0.5">
+                        <p className="text-xs font-medium tabular-nums">{formatCurrency(s.value)}</p>
+                        <p className="text-[10px] text-muted-foreground tabular-nums">{valueSharePct.toFixed(1)}% of total</p>
+                      </div>
                     </div>
                   </div>
                 </div>

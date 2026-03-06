@@ -5,13 +5,16 @@ import { Input } from "@/components/ui/input"
 import { Button } from "@/components/ui/button"
 import { Skeleton } from "@/components/ui/skeleton"
 import { EmptyState } from "@/components/shared/empty-state"
-import { Plus, Loader2, Eye, X, Bell, BellRing } from "lucide-react"
+import { Dialog, DialogContent, DialogHeader, DialogTitle } from "@/components/ui/dialog"
+import { Label } from "@/components/ui/label"
+import { Plus, Loader2, Eye, X, Bell, BellRing, BellDot } from "lucide-react"
+import { toast } from "sonner"
 import { formatPercent } from "@/lib/utils"
 import {
   useWatchlist,
   useAddToWatchlist,
   useRemoveFromWatchlist,
-  useLivePrices,
+  useRoundRobinPrices,
   useStockHistories,
 } from "../hooks"
 import type { WatchlistItem, LivePrice } from "../hooks"
@@ -23,8 +26,6 @@ import type { StockHistoryPoint } from "../hooks"
 
 // Only DoD, WoW, MoM, YTD shown as individual columns; multi-year rolled into YoxY
 const SHORT_METRIC_KEYS: (keyof ChangeMetrics)[] = ["dod", "wow", "mom", "ytd"]
-
-const ALERT_THRESHOLD = 0.5 // ±0.5%
 
 function ChangeCell({ value }: { value: number | null | undefined }) {
   if (value === null || value === undefined) {
@@ -170,14 +171,19 @@ function get7DayAvgVolume(data: StockHistoryPoint[]): number | null {
   return total / sessions.length
 }
 
-function HiLo({ high, low }: { high: number; low: number }) {
+function HiLo({ high, low, price }: { high: number; low: number; price: number }) {
   if (high === 0 && low === 0) return <span className="text-muted-foreground/40">-</span>
   const fmt = (n: number) => n.toLocaleString("en-PK", { minimumFractionDigits: 2, maximumFractionDigits: 2 })
+  const highPct = price > 0 ? ((high - price) / price) * 100 : null
+  const lowPct = price > 0 ? ((low - price) / price) * 100 : null
   return (
-    <span className="tabular-nums text-xs">
-      <span className="text-green-500">{fmt(high)}</span>
-      <span className="text-muted-foreground/50 mx-0.5">/</span>
-      <span className="text-red-500">{fmt(low)}</span>
+    <span className="tabular-nums text-xs space-y-0.5 block text-right">
+      <span className="block text-green-500">
+        {fmt(high)}{highPct != null ? <span className="ml-1 opacity-70">(+{highPct.toFixed(1)}%)</span> : null}
+      </span>
+      <span className="block text-red-500">
+        {fmt(low)}{lowPct != null ? <span className="ml-1 opacity-70">({lowPct.toFixed(1)}%)</span> : null}
+      </span>
     </span>
   )
 }
@@ -203,20 +209,44 @@ function VolumeCell({ liveVol, avgVol }: { liveVol: number; avgVol: number | nul
 }
 
 function sendNotification(symbol: string, changePct: number, price: number) {
-  if (typeof window === "undefined" || !("Notification" in window)) return
-  if (Notification.permission !== "granted") return
-  const direction = changePct >= 0 ? "up" : "down"
   const sign = changePct >= 0 ? "+" : ""
-  new Notification(`${symbol} price alert`, {
-    body: `${symbol} is ${direction} ${sign}${changePct.toFixed(2)}% — PKR ${price.toLocaleString("en-PK", { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`,
-    icon: changePct >= 0 ? undefined : undefined,
-  })
+  const priceStr = price.toLocaleString("en-PK", { minimumFractionDigits: 2, maximumFractionDigits: 2 })
+  const msg = `${symbol} ${sign}${changePct.toFixed(2)}% — PKR ${priceStr}`
+
+  if (changePct >= 0) {
+    toast.success(`Price alert: ${msg}`, { duration: 15000 })
+  } else {
+    toast.error(`Price alert: ${msg}`, { duration: 15000 })
+  }
+
+  if (typeof window !== "undefined" && "Notification" in window && Notification.permission === "granted") {
+    new Notification(`${symbol} price alert`, { body: msg })
+  }
 }
+
+type AlertEntry = { refPrice: number; threshold: number }
 
 export function WatchlistTab() {
   const [symbolInput, setSymbolInput] = useState("")
-  const [alertPrices, setAlertPrices] = useState<Map<string, number>>(new Map())
+  const [alertPrices, setAlertPrices] = useState<Map<string, AlertEntry>>(() => {
+    if (typeof window === "undefined") return new Map()
+    try {
+      const saved = localStorage.getItem("watchlist-alerts")
+      if (saved) return new Map(JSON.parse(saved) as [string, AlertEntry][])
+    } catch {}
+    return new Map()
+  })
+  const [alertDialog, setAlertDialog] = useState<{ symbol: string; price: number } | { symbol: "__all__"; price: 0 } | null>(null)
+  const [thresholdInput, setThresholdInput] = useState("0.5")
   const firedRef = useRef<Set<string>>(new Set())
+  const [flashMap, setFlashMap] = useState<Map<string, "up" | "down">>(new Map())
+  const prevPricesRef = useRef<Map<string, number>>(new Map())
+  const flashTimersRef = useRef<Map<string, ReturnType<typeof setTimeout>>>(new Map())
+
+  // Persist alerts to localStorage whenever they change
+  useEffect(() => {
+    localStorage.setItem("watchlist-alerts", JSON.stringify(Array.from(alertPrices.entries())))
+  }, [alertPrices])
 
   const { data: watchlistItems, isLoading: watchlistLoading } = useWatchlist()
   const addMutation = useAddToWatchlist()
@@ -224,8 +254,37 @@ export function WatchlistTab() {
 
   const symbols = ((watchlistItems as WatchlistItem[]) ?? []).map((item) => item.symbol)
 
-  const { data: livePrices, isLoading: livePricesLoading, isFetching: livePricesFetching } = useLivePrices(symbols)
+  const { data: livePrices, isLoading: livePricesLoading, isFetching: livePricesFetching } = useRoundRobinPrices(symbols)
   const { data: histories, isLoading: historiesLoading } = useStockHistories(symbols, "max")
+
+  // Flash price cells when prices change after a fetch
+  useEffect(() => {
+    if (!livePrices) return
+    const updates: [string, "up" | "down"][] = []
+    for (const lp of livePrices) {
+      const prev = prevPricesRef.current.get(lp.symbol)
+      if (prev !== undefined && lp.price > 0 && lp.price !== prev) {
+        updates.push([lp.symbol, lp.price > prev ? "up" : "down"])
+      }
+      prevPricesRef.current.set(lp.symbol, lp.price)
+    }
+    if (updates.length === 0) return
+    setFlashMap((prev) => { const next = new Map(prev); for (const [s, d] of updates) next.set(s, d); return next })
+    for (const [sym] of updates) {
+      const existing = flashTimersRef.current.get(sym)
+      if (existing) clearTimeout(existing)
+      const t = setTimeout(() => {
+        setFlashMap((prev) => { const next = new Map(prev); next.delete(sym); return next })
+        flashTimersRef.current.delete(sym)
+      }, 2200)
+      flashTimersRef.current.set(sym, t)
+    }
+  }, [livePrices])
+
+  // Cleanup flash timers on unmount
+  useEffect(() => {
+    return () => { for (const t of flashTimersRef.current.values()) clearTimeout(t) }
+  }, [])
 
   const livePriceMap = new Map<string, LivePrice>()
   if (livePrices) {
@@ -260,40 +319,87 @@ export function WatchlistTab() {
   const handleRemove = (symbol: string) => {
     removeMutation.mutate(symbol)
     setAlertPrices((prev) => { const next = new Map(prev); next.delete(symbol); return next })
+    if (alertDialog?.symbol === symbol) setAlertDialog(null)
   }
 
-  const toggleAlert = (symbol: string, currentPrice: number) => {
-    setAlertPrices((prev) => {
-      const next = new Map(prev)
-      if (next.has(symbol)) {
-        next.delete(symbol)
-        firedRef.current.delete(symbol)
-      } else if (currentPrice > 0) {
-        next.set(symbol, currentPrice)
-        firedRef.current.delete(symbol)
-        // Request permission on first alert
-        if (typeof window !== "undefined" && "Notification" in window && Notification.permission === "default") {
-          Notification.requestPermission()
+  const removeAlert = (symbol: string) => {
+    setAlertPrices((prev) => { const next = new Map(prev); next.delete(symbol); return next })
+    firedRef.current.delete(symbol)
+  }
+
+  const openAlertDialog = (symbol: string, price: number) => {
+    setThresholdInput("0.5")
+    setAlertDialog({ symbol, price })
+  }
+
+  const confirmAlert = () => {
+    if (!alertDialog) return
+    const threshold = parseFloat(thresholdInput)
+    if (isNaN(threshold) || threshold <= 0) { setAlertDialog(null); return }
+
+    if (alertDialog.symbol === "__all__") {
+      // Set alert for every symbol that has a live price
+      setAlertPrices((prev) => {
+        const next = new Map(prev)
+        for (const sym of symbols) {
+          const price = livePriceMap.get(sym)?.price ?? 0
+          if (price > 0) {
+            next.set(sym, { refPrice: price, threshold })
+            firedRef.current.delete(sym)
+          }
         }
+        return next
+      })
+    } else {
+      if (alertDialog.price > 0) {
+        setAlertPrices((prev) => { const next = new Map(prev); next.set(alertDialog.symbol, { refPrice: alertDialog.price, threshold }); return next })
+        firedRef.current.delete(alertDialog.symbol)
       }
-      return next
-    })
+    }
+
+    if (typeof window !== "undefined" && "Notification" in window && Notification.permission === "default") {
+      Notification.requestPermission()
+    }
+    setAlertDialog(null)
+  }
+
+  const fireTestAlert = async () => {
+    // Toast always works — fire it immediately
+    toast.success("Price alert: LUCK +2.50% — PKR 155.00 (test)", { duration: 15000 })
+
+    // Also try browser notification
+    if (typeof window !== "undefined" && "Notification" in window) {
+      if (Notification.permission === "default") {
+        await Notification.requestPermission()
+      }
+      if (Notification.permission === "granted") {
+        new Notification("Vaultbase price alert — test", {
+          body: "LUCK +2.50% — PKR 155.00 (test notification)",
+        })
+      }
+    }
   }
 
   // Check live prices against alert thresholds
   useEffect(() => {
     if (alertPrices.size === 0 || !livePrices) return
     for (const lp of livePrices) {
-      const refPrice = alertPrices.get(lp.symbol)
-      if (refPrice === undefined || refPrice === 0 || lp.price === 0) continue
+      const entry = alertPrices.get(lp.symbol)
+      if (!entry || entry.refPrice === 0 || lp.price === 0) continue
       if (firedRef.current.has(lp.symbol)) continue
 
-      const changePct = ((lp.price - refPrice) / refPrice) * 100
-      if (Math.abs(changePct) >= ALERT_THRESHOLD) {
+      const changePct = ((lp.price - entry.refPrice) / entry.refPrice) * 100
+      if (Math.abs(changePct) >= entry.threshold) {
         sendNotification(lp.symbol, changePct, lp.price)
-        firedRef.current.add(lp.symbol)
-        // Auto-remove the alert after firing
-        setAlertPrices((prev) => { const next = new Map(prev); next.delete(lp.symbol); return next })
+        // Roll the base price forward to the triggered price so the next
+        // alert fires when the price moves another ±threshold% from here
+        setAlertPrices((prev) => {
+          const next = new Map(prev)
+          next.set(lp.symbol, { refPrice: lp.price, threshold: entry.threshold })
+          return next
+        })
+        // Allow re-firing once the ref price has been updated
+        firedRef.current.delete(lp.symbol)
       }
     }
   }, [livePrices, alertPrices])
@@ -329,12 +435,23 @@ export function WatchlistTab() {
           {addMutation.isPending ? "Adding..." : "Add"}
         </Button>
         </div>
-        {livePricesFetching && !isDataLoading && (
-          <span className="flex items-center gap-1 text-xs text-muted-foreground">
-            <Loader2 className="h-3 w-3 animate-spin" />
-            Updating prices…
-          </span>
-        )}
+        <div className="flex items-center gap-2">
+          {symbols.length > 0 && (
+            <Button
+              size="sm"
+              variant="outline"
+              onClick={() => { setThresholdInput("0.5"); setAlertDialog({ symbol: "__all__", price: 0 }) }}
+              title="Set price alert for all watchlist symbols at once"
+            >
+              <BellRing className="h-3.5 w-3.5 mr-1.5" />
+              Alert All
+            </Button>
+          )}
+          <Button size="sm" variant="outline" onClick={fireTestAlert} title="Send a test notification to verify alerts are working">
+            <BellDot className="h-3.5 w-3.5 mr-1.5" />
+            Test Alert
+          </Button>
+        </div>
       </div>
 
       {symbols.length === 0 && !watchlistLoading ? (
@@ -371,7 +488,7 @@ export function WatchlistTab() {
                   const avg = avgPriceMap.get(symbol) ?? null
                   const dod = metrics?.dod
                   const isAlerting = alertPrices.has(symbol)
-                  const refPrice = alertPrices.get(symbol)
+                  const alertEntry = alertPrices.get(symbol)
 
                   const fmt = (n: number) => n.toLocaleString("en-PK", { minimumFractionDigits: 2, maximumFractionDigits: 2 })
                   const pct = (n: number) => `${n >= 0 ? "+" : ""}${n.toFixed(2)}%`
@@ -388,19 +505,33 @@ export function WatchlistTab() {
                     : null
 
                   return (
-                    <div key={symbol} className="rounded-xl border p-2 space-y-1.5 text-[10px]">
+                    <div
+                      key={symbol}
+                      className="rounded-xl border p-2 space-y-1.5 text-[10px]"
+                      style={flashMap.get(symbol) === "up" ? { animation: "price-flash-up 2s ease-out forwards" } : flashMap.get(symbol) === "down" ? { animation: "price-flash-down 2s ease-out forwards" } : undefined}
+                    >
 
                       {/* Symbol + actions */}
                       <div className="flex items-center justify-between gap-0.5">
                         <span className="font-bold text-[11px] truncate">{symbol}</span>
                         <div className="flex shrink-0">
-                          <button
-                            onClick={() => toggleAlert(symbol, price)}
-                            className={`p-0.5 rounded transition-colors ${isAlerting ? "text-yellow-500" : "text-muted-foreground/40"}`}
-                            title={isAlerting ? `Alert active — ref PKR ${refPrice?.toLocaleString("en-PK", { minimumFractionDigits: 2 })} (±${ALERT_THRESHOLD}%)` : `Set alert (±${ALERT_THRESHOLD}%)`}
-                          >
-                            {isAlerting ? <BellRing className="h-2.5 w-2.5" /> : <Bell className="h-2.5 w-2.5" />}
-                          </button>
+                          {isAlerting ? (
+                            <button
+                              onClick={() => removeAlert(symbol)}
+                              className="p-0.5 rounded transition-colors text-yellow-500"
+                              title={`Alert active — ref PKR ${alertEntry?.refPrice.toLocaleString("en-PK", { minimumFractionDigits: 2 })} (±${alertEntry?.threshold}%) — click to remove`}
+                            >
+                              <BellRing className="h-2.5 w-2.5" />
+                            </button>
+                          ) : (
+                            <button
+                              onClick={() => openAlertDialog(symbol, price)}
+                              className="p-0.5 rounded transition-colors text-muted-foreground/40"
+                              title="Set price alert"
+                            >
+                              <Bell className="h-2.5 w-2.5" />
+                            </button>
+                          )}
                           <button onClick={() => handleRemove(symbol)} className="p-0.5 rounded hover:bg-muted">
                             <X className="h-2.5 w-2.5 text-muted-foreground/40" />
                           </button>
@@ -409,7 +540,9 @@ export function WatchlistTab() {
 
                       {/* Price + DoD on same line */}
                       <div className="flex items-center justify-between tabular-nums">
-                        <span className={`font-semibold text-[11px] ${dod != null ? (dod >= 0 ? "text-green-500" : "text-red-500") : ""}`}>{price > 0 ? `Rs. ${fmt(price)}` : "—"}</span>
+                        <span
+                          className={`font-semibold text-[11px] rounded px-0.5 ${dod != null ? (dod >= 0 ? "text-green-500" : "text-red-500") : ""}`}
+                        >{price > 0 ? `Rs. ${fmt(price)}` : "—"}</span>
                         {dod != null && (
                           <span className={dod >= 0 ? "text-green-500" : "text-red-500"}>{pct(dod)}</span>
                         )}
@@ -500,9 +633,13 @@ export function WatchlistTab() {
                         const price = lp?.price ?? 0
                         const volume = lp?.volume ?? 0
                         const isAlerting = alertPrices.has(symbol)
-                        const refPrice = alertPrices.get(symbol)
+                        const alertEntry = alertPrices.get(symbol)
                         return (
-                          <tr key={symbol} className="border-b last:border-b-0 group hover:bg-muted/30 transition-colors">
+                          <tr
+                            key={symbol}
+                            className="border-b last:border-b-0 group hover:bg-muted/30"
+                            style={flashMap.get(symbol) === "up" ? { animation: "price-flash-up 2s ease-out forwards" } : flashMap.get(symbol) === "down" ? { animation: "price-flash-down 2s ease-out forwards" } : undefined}
+                          >
                             <td className="px-2 py-2.5 text-muted-foreground tabular-nums">{i + 1}</td>
                             <td className="px-2 py-2.5 font-semibold">{symbol}</td>
                             <td className="px-2 py-2.5 text-right font-medium tabular-nums">
@@ -511,7 +648,7 @@ export function WatchlistTab() {
                                 : "-"}
                             </td>
                             <td className="px-2 py-2.5 text-right hidden md:table-cell">
-                              <HiLo high={lp?.dayHigh ?? 0} low={lp?.dayLow ?? 0} />
+                              <HiLo high={lp?.dayHigh ?? 0} low={lp?.dayLow ?? 0} price={price} />
                             </td>
                             <td className="px-2 py-2.5 text-right tabular-nums text-xs">
                               <LastSeenBadge days={daysAtPriceMap.get(symbol) ?? null} />
@@ -532,21 +669,23 @@ export function WatchlistTab() {
                             </td>
                             <td className="px-2 py-2.5">
                               <div className="flex items-center justify-end gap-0.5">
-                                <button
-                                  onClick={() => toggleAlert(symbol, price)}
-                                  className={`p-1 rounded-md transition-colors ${
-                                    isAlerting
-                                      ? "text-yellow-500 hover:text-yellow-400"
-                                      : "text-muted-foreground/50 hover:text-foreground"
-                                  }`}
-                                  title={
-                                    isAlerting
-                                      ? `Alert active — ref PKR ${refPrice?.toLocaleString("en-PK", { minimumFractionDigits: 2 })} (±${ALERT_THRESHOLD}%)`
-                                      : `Set price alert (±${ALERT_THRESHOLD}% from current)`
-                                  }
-                                >
-                                  {isAlerting ? <BellRing className="h-3.5 w-3.5" /> : <Bell className="h-3.5 w-3.5" />}
-                                </button>
+                                {isAlerting ? (
+                                  <button
+                                    onClick={() => removeAlert(symbol)}
+                                    className="p-1 rounded-md transition-colors text-yellow-500 hover:text-yellow-400"
+                                    title={`Alert active — ref PKR ${alertEntry?.refPrice.toLocaleString("en-PK", { minimumFractionDigits: 2 })} (±${alertEntry?.threshold}%) — click to remove`}
+                                  >
+                                    <BellRing className="h-3.5 w-3.5" />
+                                  </button>
+                                ) : (
+                                  <button
+                                    onClick={() => openAlertDialog(symbol, price)}
+                                    className="p-1 rounded-md transition-colors text-muted-foreground/50 hover:text-foreground"
+                                    title="Set price alert"
+                                  >
+                                    <Bell className="h-3.5 w-3.5" />
+                                  </button>
+                                )}
                                 <button
                                   onClick={() => handleRemove(symbol)}
                                   className="opacity-0 group-hover:opacity-100 transition-opacity p-1 rounded-md hover:bg-muted"
@@ -564,6 +703,46 @@ export function WatchlistTab() {
           </div>
         </>
       )}
+
+      <Dialog open={!!alertDialog} onOpenChange={(open) => { if (!open) setAlertDialog(null) }}>
+        <DialogContent className="max-w-sm">
+          <DialogHeader>
+            <DialogTitle>
+              {alertDialog?.symbol === "__all__"
+                ? `Alert All — ${symbols.length} symbols`
+                : `Set Price Alert — ${alertDialog?.symbol}`}
+            </DialogTitle>
+          </DialogHeader>
+          <div className="space-y-4 pt-2">
+            <div className="space-y-1.5">
+              <Label>Alert threshold (%)</Label>
+              <div className="flex items-center gap-2">
+                <span className="text-muted-foreground">±</span>
+                <Input
+                  type="number"
+                  min="0.01"
+                  step="0.1"
+                  value={thresholdInput}
+                  onChange={(e) => setThresholdInput(e.target.value)}
+                  onKeyDown={(e) => { if (e.key === "Enter") confirmAlert() }}
+                  autoFocus
+                />
+                <span className="text-muted-foreground">%</span>
+              </div>
+              {alertDialog?.symbol === "__all__" ? (
+                <p className="text-xs text-muted-foreground">Ref price set to current live price for each symbol.</p>
+              ) : (
+                <p className="text-xs text-muted-foreground">
+                  Ref price: PKR {alertDialog?.price.toLocaleString("en-PK", { minimumFractionDigits: 2, maximumFractionDigits: 2 }) ?? "—"}
+                </p>
+              )}
+            </div>
+            <Button className="w-full" onClick={confirmAlert}>
+              {alertDialog?.symbol === "__all__" ? `Alert All ${symbols.length} Symbols` : "Set Alert"}
+            </Button>
+          </div>
+        </DialogContent>
+      </Dialog>
     </div>
   )
 }

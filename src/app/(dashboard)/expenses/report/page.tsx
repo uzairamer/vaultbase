@@ -29,6 +29,7 @@ const SUBTYPES: Record<string, string> = {
   lending: "Lending",
   debt_repayment: "Debt Repayment",
   savings_investment: "Savings / Investment",
+  stock_purchase: "Stock Purchase",
 }
 
 function AssetRow({ label, value, sub }: { label: string; value: number; sub?: string }) {

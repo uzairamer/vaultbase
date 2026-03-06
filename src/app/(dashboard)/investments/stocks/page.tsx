@@ -21,6 +21,22 @@ import { format } from "date-fns"
 import { toast } from "sonner"
 import Link from "next/link"
 
+type UnifiedRow = {
+  _kind: "buy" | "sell"
+  id: string
+  date: string
+  symbol: string
+  name: string
+  qty: number
+  buyQty: number
+  soldQty: number
+  avgBuyPrice: number
+  sellPrice: number
+  fee: number
+  lotAvgBuyPrice: number
+  _holdingId: string
+}
+
 export default function StocksPage() {
   const { data: stocks = [], isLoading } = useStocks()
   const createStock = useCreateStock()
@@ -32,6 +48,7 @@ export default function StocksPage() {
   const [sellOpen, setSellOpen] = useState(false)
   const [selectedSymbol, setSelectedSymbol] = useState("")
   const [selectedWalletId, setSelectedWalletId] = useState("")
+  const [addWalletId, setAddWalletId] = useState("")
 
   const stockList = stocks as Record<string, unknown>[]
   const walletList = wallets as Record<string, unknown>[]
@@ -43,7 +60,6 @@ export default function StocksPage() {
   const getPrice = (s: Record<string, unknown>) =>
     livePriceMap.get(s.symbol as string) ?? Number(s.currentPrice ?? s.avgBuyPrice)
 
-  // Net portfolio value: uses original buy qty minus sold qty per lot
   const totalValue = useMemo(() => {
     return stockList.reduce((sum, s) => {
       const buyQty = Number(s.quantity)
@@ -56,7 +72,6 @@ export default function StocksPage() {
   // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [stockList, livePriceMap])
 
-  // Available qty per symbol (buy qty − sell trades), used in sell dialog
   const aggregatedQty = useMemo(() => {
     const map = new Map<string, number>()
     for (const s of stockList) {
@@ -75,109 +90,181 @@ export default function StocksPage() {
     [aggregatedQty]
   )
 
-  // All sell trades across all lots, enriched with the lot's avg buy price
-  const sellHistory = useMemo((): Record<string, unknown>[] => {
-    return stockList
-      .flatMap((s) =>
-        ((s.trades as Record<string, unknown>[]) ?? [])
-          .filter((t) => t.type === "sell")
-          .map((t): Record<string, unknown> => ({
-            ...t,
-            symbol: s.symbol as string,
-            lotAvgBuyPrice: s.avgBuyPrice,
-          }))
-      )
-      .sort((a, b) => new Date(b.date as string).getTime() - new Date(a.date as string).getTime())
+  const unifiedData = useMemo((): UnifiedRow[] => {
+    const rows: UnifiedRow[] = []
+    for (const s of stockList) {
+      const trades = (s.trades as Record<string, unknown>[]) ?? []
+      const soldQty = trades
+        .filter((t) => t.type === "sell")
+        .reduce((a, t) => a + Number(t.quantity), 0)
+
+      rows.push({
+        _kind: "buy",
+        id: s.id as string,
+        date: (s.purchaseDate ?? s.createdAt) as string,
+        symbol: s.symbol as string,
+        name: s.name as string,
+        qty: Math.max(0, Number(s.quantity) - soldQty),
+        buyQty: Number(s.quantity),
+        soldQty,
+        avgBuyPrice: Number(s.avgBuyPrice),
+        sellPrice: 0,
+        fee: 0,
+        lotAvgBuyPrice: 0,
+        _holdingId: s.id as string,
+      })
+
+      for (const t of trades) {
+        if (t.type !== "sell") continue
+        rows.push({
+          _kind: "sell",
+          id: t.id as string,
+          date: t.date as string,
+          symbol: s.symbol as string,
+          name: s.name as string,
+          qty: Number(t.quantity),
+          buyQty: 0,
+          soldQty: 0,
+          avgBuyPrice: Number(s.avgBuyPrice),
+          sellPrice: Number(t.price),
+          fee: Number(t.fee ?? 0),
+          lotAvgBuyPrice: Number(s.avgBuyPrice),
+          _holdingId: s.id as string,
+        })
+      }
+    }
+    return rows.sort((a, b) => new Date(b.date).getTime() - new Date(a.date).getTime())
   }, [stockList])
 
   const selectedWallet = walletList.find((w) => w.id === selectedWalletId)
   const segments = (selectedWallet?.segments as Record<string, unknown>[] | undefined) ?? []
   const availableQty = selectedSymbol ? (aggregatedQty.get(selectedSymbol) ?? 0) : 0
 
-  const columns: ColumnDef<Record<string, unknown>>[] = [
+  const columns: ColumnDef<UnifiedRow>[] = [
+    {
+      accessorKey: "date",
+      header: "Date",
+      cell: ({ row }) => (
+        <span className="text-muted-foreground tabular-nums text-xs whitespace-nowrap">
+          {format(new Date(row.original.date), "MMM dd, yyyy")}
+        </span>
+      ),
+    },
+    {
+      accessorKey: "_kind",
+      header: "Type",
+      cell: ({ row }) =>
+        row.original._kind === "buy" ? (
+          <Badge variant="outline" className="text-green-500 border-green-500/30 bg-green-500/10 text-xs">Buy</Badge>
+        ) : (
+          <Badge variant="outline" className="text-red-500 border-red-500/30 bg-red-500/10 text-xs">Sell</Badge>
+        ),
+    },
     {
       accessorKey: "symbol",
       header: "Symbol",
-      cell: ({ row }) => (
-        <Link
-          href={`/investments/stocks/${(row.original as Record<string, string>).id}`}
-          className="font-medium text-primary hover:underline"
-        >
-          {row.getValue("symbol") as string}
-        </Link>
-      ),
+      cell: ({ row }) => {
+        const r = row.original
+        return r._kind === "buy" ? (
+          <Link
+            href={`/investments/stocks/${r._holdingId}`}
+            className="font-medium text-primary hover:underline"
+          >
+            {r.symbol}
+          </Link>
+        ) : (
+          <span className="font-medium">{r.symbol}</span>
+        )
+      },
     },
-    { accessorKey: "name", header: "Name" },
     {
-      id: "qty",
+      accessorKey: "name",
+      header: "Name",
+      cell: ({ row }) => <span className="text-muted-foreground">{row.original.name}</span>,
+    },
+    {
+      accessorKey: "qty",
       header: "Qty",
       cell: ({ row }) => {
-        const s = row.original
-        const buyQty = Number(s.quantity)
-        const soldQty = ((s.trades as Record<string, unknown>[]) ?? [])
-          .filter((t) => t.type === "sell")
-          .reduce((a, t) => a + Number(t.quantity), 0)
-        const net = Math.max(0, buyQty - soldQty)
+        const r = row.original
+        if (r._kind === "sell") return <span className="tabular-nums">{r.qty.toFixed(2)}</span>
         return (
-          <span className={soldQty > 0 ? "text-muted-foreground" : ""}>
-            {net.toFixed(2)}
-            {soldQty > 0 && (
-              <span className="ml-1 text-[10px] text-muted-foreground/60">({buyQty.toFixed(2)} bought)</span>
+          <span className={r.soldQty > 0 ? "text-muted-foreground" : ""}>
+            {r.qty.toFixed(2)}
+            {r.soldQty > 0 && (
+              <span className="ml-1 text-[10px] text-muted-foreground/60">({r.buyQty.toFixed(2)} bought)</span>
             )}
           </span>
         )
       },
     },
     {
-      accessorKey: "avgBuyPrice",
-      header: "Avg Buy",
-      cell: ({ row }) => formatCurrency(Number(row.getValue("avgBuyPrice"))),
+      id: "price",
+      header: "Price",
+      cell: ({ row }) => {
+        const r = row.original
+        return (
+          <span className="tabular-nums">
+            {formatCurrency(r._kind === "buy" ? r.avgBuyPrice : r.sellPrice)}
+          </span>
+        )
+      },
     },
     {
-      id: "currentPrice",
+      id: "livePrice",
       header: "Live Price",
       cell: ({ row }) => {
-        const sym = (row.original as Record<string, unknown>).symbol as string
-        const live = livePriceMap.get(sym)
-        return live ? formatCurrency(live) : <span className="text-muted-foreground/50">—</span>
+        const r = row.original
+        if (r._kind === "sell") return <span className="text-muted-foreground/40">—</span>
+        const live = livePriceMap.get(r.symbol)
+        return live
+          ? <span className="tabular-nums">{formatCurrency(live)}</span>
+          : <span className="text-muted-foreground/50">—</span>
       },
     },
     {
       id: "pnl",
       header: "P&L",
       cell: ({ row }) => {
-        const s = row.original as Record<string, unknown>
-        const buyQty = Number(s.quantity)
-        const soldQty = ((s.trades as Record<string, unknown>[]) ?? [])
-          .filter((t) => t.type === "sell")
-          .reduce((a, t) => a + Number(t.quantity), 0)
-        const netQty = Math.max(0, buyQty - soldQty)
-        const avg = Number(s.avgBuyPrice)
-        const cur = getPrice(s)
-        const pnl = (cur - avg) * netQty
-        const pct = avg > 0 ? ((cur - avg) / avg) * 100 : 0
-        return (
-          <span className={pnl >= 0 ? "text-green-500" : "text-red-500"}>
-            {formatCurrency(pnl)} ({formatPercent(pct)})
-          </span>
-        )
+        const r = row.original
+        if (r._kind === "buy") {
+          const cur = livePriceMap.get(r.symbol) ?? r.avgBuyPrice
+          const pnl = (cur - r.avgBuyPrice) * r.qty
+          const pct = r.avgBuyPrice > 0 ? ((cur - r.avgBuyPrice) / r.avgBuyPrice) * 100 : 0
+          return (
+            <span className={pnl >= 0 ? "text-green-500" : "text-red-500"}>
+              {formatCurrency(pnl)} ({formatPercent(pct)})
+            </span>
+          )
+        } else {
+          const pnl = (r.sellPrice - r.lotAvgBuyPrice) * r.qty - r.fee
+          return (
+            <span className={pnl >= 0 ? "text-green-500" : "text-red-500"}>
+              {pnl >= 0 ? "+" : ""}{formatCurrency(pnl)}
+            </span>
+          )
+        }
       },
     },
     {
       id: "actions",
-      cell: ({ row }) => (
-        <Button
-          variant="ghost"
-          size="icon"
-          onClick={() =>
-            deleteStock.mutate((row.original as Record<string, string>).id, {
-              onSuccess: () => toast.success("Deleted"),
-            })
-          }
-        >
-          <Trash2 className="h-4 w-4" />
-        </Button>
-      ),
+      cell: ({ row }) => {
+        const r = row.original
+        if (r._kind === "sell") return null
+        return (
+          <Button
+            variant="ghost"
+            size="icon"
+            onClick={() =>
+              deleteStock.mutate(r._holdingId, {
+                onSuccess: () => toast.success("Deleted"),
+              })
+            }
+          >
+            <Trash2 className="h-4 w-4" />
+          </Button>
+        )
+      },
     },
   ]
 
@@ -190,9 +277,12 @@ export default function StocksPage() {
         name: fd.get("name") as string,
         quantity: Number(fd.get("quantity")),
         avgBuyPrice: Number(fd.get("avgBuyPrice")),
+        purchaseDate: fd.get("purchaseDate") as string,
+        walletId: addWalletId || undefined,
+        segmentId: (fd.get("addSegmentId") as string) || undefined,
       },
       {
-        onSuccess: () => { setAddOpen(false); toast.success("Stock added") },
+        onSuccess: () => { setAddOpen(false); setAddWalletId(""); toast.success("Stock added") },
         onError: (err) => toast.error(err.message),
       },
     )
@@ -346,6 +436,37 @@ export default function StocksPage() {
                     <Input name="avgBuyPrice" type="number" step="0.0001" min="0" required />
                   </div>
                 </div>
+                <div className="space-y-2">
+                  <Label>Date of Purchase</Label>
+                  <Input name="purchaseDate" type="date" required defaultValue={new Date().toISOString().split("T")[0]} />
+                </div>
+                <div className="space-y-2">
+                  <Label>Deduct from Wallet <span className="text-muted-foreground text-xs">(optional)</span></Label>
+                  <Select value={addWalletId} onValueChange={setAddWalletId}>
+                    <SelectTrigger><SelectValue placeholder="No wallet deduction" /></SelectTrigger>
+                    <SelectContent>
+                      {walletList.map((w) => (
+                        <SelectItem key={w.id as string} value={w.id as string}>{w.name as string}</SelectItem>
+                      ))}
+                    </SelectContent>
+                  </Select>
+                </div>
+                {addWalletId && (() => {
+                  const segs = (walletList.find((w) => w.id === addWalletId)?.segments as Record<string, unknown>[] | undefined) ?? []
+                  return segs.length > 0 ? (
+                    <div className="space-y-2">
+                      <Label>Segment <span className="text-muted-foreground text-xs">(optional)</span></Label>
+                      <Select name="addSegmentId">
+                        <SelectTrigger><SelectValue placeholder="No segment" /></SelectTrigger>
+                        <SelectContent>
+                          {segs.map((seg) => (
+                            <SelectItem key={seg.id as string} value={seg.id as string}>{seg.name as string}</SelectItem>
+                          ))}
+                        </SelectContent>
+                      </Select>
+                    </div>
+                  ) : null
+                })()}
                 <p className="text-xs text-muted-foreground">Live price is fetched automatically.</p>
                 <Button type="submit" className="w-full" disabled={createStock.isPending}>
                   {createStock.isPending ? "Adding..." : "Add Stock"}
@@ -359,60 +480,22 @@ export default function StocksPage() {
       {stockList.length === 0 ? (
         <EmptyState icon={BarChart3} title="No stocks" description="Add your first stock holding." />
       ) : (
-        <>
-          <DataTable
-            columns={columns}
-            data={stockList}
-            searchKey="symbol"
-            searchPlaceholder="Search by symbol..."
-          />
-
-          {sellHistory.length > 0 && (
-            <Card>
-              <CardHeader className="pb-3">
-                <CardTitle className="text-base flex items-center gap-2">
-                  <TrendingDown className="h-4 w-4 text-red-500" />
-                  Sell History
-                </CardTitle>
-              </CardHeader>
-              <CardContent className="p-0">
-                <div className="divide-y text-sm">
-                  <div className="grid grid-cols-6 gap-2 px-4 py-2 text-xs font-medium text-muted-foreground border-b bg-muted/40">
-                    <span>Date</span>
-                    <span>Symbol</span>
-                    <span className="text-right">Qty Sold</span>
-                    <span className="text-right">Avg Buy</span>
-                    <span className="text-right">Sell Price</span>
-                    <span className="text-right">P&L</span>
-                  </div>
-                  {sellHistory.map((t) => {
-                    const qty = Number(t.quantity)
-                    const sellPrice = Number(t.price)
-                    const avgBuy = Number(t.lotAvgBuyPrice)
-                    const pnl = (sellPrice - avgBuy) * qty
-                    const isProfit = pnl >= 0
-                    return (
-                      <div key={t.id as string} className="grid grid-cols-6 gap-2 px-4 py-2.5 hover:bg-muted/20 transition-colors">
-                        <span className="text-muted-foreground">
-                          {format(new Date(t.date as string), "MMM dd, yyyy")}
-                        </span>
-                        <span>
-                          <Badge variant="outline" className="text-xs font-medium">{t.symbol as string}</Badge>
-                        </span>
-                        <span className="text-right tabular-nums">{qty.toFixed(2)}</span>
-                        <span className="text-right tabular-nums text-muted-foreground">{formatCurrency(avgBuy)}</span>
-                        <span className="text-right tabular-nums">{formatCurrency(sellPrice)}</span>
-                        <span className={`text-right tabular-nums font-medium ${isProfit ? "text-green-600 dark:text-green-400" : "text-red-600 dark:text-red-400"}`}>
-                          {isProfit ? "+" : ""}{formatCurrency(pnl)}
-                        </span>
-                      </div>
-                    )
-                  })}
-                </div>
-              </CardContent>
-            </Card>
-          )}
-        </>
+        <Card>
+          <CardHeader className="pb-3">
+            <CardTitle className="text-base flex items-center gap-2">
+              <BarChart3 className="h-4 w-4" />
+              Transactions
+            </CardTitle>
+          </CardHeader>
+          <CardContent className="p-4 pt-0">
+            <DataTable
+              columns={columns}
+              data={unifiedData}
+              searchKey="symbol"
+              searchPlaceholder="Search by symbol..."
+            />
+          </CardContent>
+        </Card>
       )}
     </div>
   )

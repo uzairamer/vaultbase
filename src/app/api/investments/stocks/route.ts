@@ -9,7 +9,10 @@ const holdingSchema = z.object({
   quantity: z.coerce.number().positive(),
   avgBuyPrice: z.coerce.number().positive(),
   currentPrice: z.coerce.number().optional(),
+  purchaseDate: z.coerce.date().optional(),
   currency: z.string().default("PKR"),
+  walletId: z.string().optional(),
+  segmentId: z.string().optional(),
 })
 
 const tradeSchema = z.object({
@@ -89,9 +92,46 @@ export async function POST(req: Request) {
   const parsed = holdingSchema.safeParse(body)
   if (!parsed.success) return NextResponse.json({ error: parsed.error.flatten() }, { status: 400 })
 
+  const { walletId, segmentId, ...holdingData } = parsed.data
+
+  if (walletId) {
+    const wallet = await prisma.wallet.findFirst({ where: { id: walletId, userId: session.user.id } })
+    if (!wallet) return NextResponse.json({ error: "Wallet not found" }, { status: 404 })
+  }
+
   const holding = await prisma.stockHolding.create({
-    data: { ...parsed.data, userId: session.user.id },
+    data: { ...holdingData, userId: session.user.id },
   })
+
+  if (walletId) {
+    const cost = holdingData.quantity * holdingData.avgBuyPrice
+    const purchaseDate = holdingData.purchaseDate ?? new Date()
+
+    await prisma.transaction.create({
+      data: {
+        userId: session.user.id,
+        walletId,
+        type: "outflow",
+        subType: "stock_purchase",
+        amount: cost,
+        description: `Bought ${holdingData.quantity} × ${holdingData.symbol} @ PKR ${holdingData.avgBuyPrice}`,
+        date: purchaseDate,
+        source: "manual",
+      },
+    })
+
+    await prisma.wallet.update({
+      where: { id: walletId },
+      data: { balance: { decrement: cost } },
+    })
+
+    if (segmentId) {
+      await prisma.walletSegment.updateMany({
+        where: { id: segmentId, walletId, userId: session.user.id },
+        data: { amount: { decrement: cost } },
+      })
+    }
+  }
 
   return NextResponse.json(holding, { status: 201 })
 }

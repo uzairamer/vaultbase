@@ -26,6 +26,7 @@ export const OUTFLOW_SUBTYPES = [
   { value: "lending", label: "Lending / Receivable Created" },
   { value: "debt_repayment", label: "Debt Repayment" },
   { value: "savings_investment", label: "Savings & Investments" },
+  { value: "stock_purchase", label: "Stock Purchase" },
 ] as const
 
 export const INVESTMENT_STATUSES = [

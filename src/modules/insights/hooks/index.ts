@@ -1,6 +1,7 @@
 "use client"
 
 import { useQuery, useQueryClient, useMutation } from "@tanstack/react-query"
+import { useState, useEffect, useRef, useMemo } from "react"
 
 async function fetcher(url: string) {
   const res = await fetch(url)
@@ -150,4 +151,54 @@ export function useLivePrices(symbols: string[]) {
     enabled: symbols.length > 0,
     refetchInterval: 10_000,
   })
+}
+
+/**
+ * Like useLivePrices but fetches one symbol at a time in round-robin order
+ * (1.5 s per symbol) so alerts fire individually instead of all at once.
+ * Initial load still fetches all symbols in parallel for a fast first render.
+ */
+export function useRoundRobinPrices(symbols: string[]) {
+  const [prices, setPrices] = useState<Map<string, LivePrice>>(new Map())
+  const [isLoading, setIsLoading] = useState(false)
+  const [isFetching, setIsFetching] = useState(false)
+  const indexRef = useRef(0)
+  const symbolsRef = useRef(symbols)
+  useEffect(() => { symbolsRef.current = symbols }, [symbols])
+
+  const symbolsKey = symbols.join(",")
+
+  // Initial load: fetch all at once so the table populates immediately
+  useEffect(() => {
+    if (symbols.length === 0) return
+    setIsLoading(true)
+    indexRef.current = 0
+    Promise.all(symbols.map(fetchLivePrice)).then((results) => {
+      setPrices(() => {
+        const m = new Map<string, LivePrice>()
+        for (const r of results) m.set(r.symbol, r)
+        return m
+      })
+      setIsLoading(false)
+    })
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [symbolsKey])
+
+  // Round-robin: fetch one symbol every 1.5 s
+  useEffect(() => {
+    const id = setInterval(async () => {
+      const syms = symbolsRef.current
+      if (syms.length === 0) return
+      const sym = syms[indexRef.current % syms.length]
+      indexRef.current = (indexRef.current + 1) % syms.length
+      setIsFetching(true)
+      const lp = await fetchLivePrice(sym)
+      setPrices((prev) => { const next = new Map(prev); next.set(sym, lp); return next })
+      setIsFetching(false)
+    }, 1500)
+    return () => clearInterval(id)
+  }, []) // intentionally empty — symbolsRef always holds the latest list
+
+  const data = useMemo(() => Array.from(prices.values()), [prices])
+  return { data, isLoading, isFetching }
 }

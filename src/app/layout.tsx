@@ -33,7 +33,7 @@ export default function RootLayout({ children }: { children: React.ReactNode }) 
             <ThemeProvider>
               <TooltipProvider>
                 {children}
-                <Toaster richColors position="top-right" expand visibleToasts={9} duration={10000} />
+                <Toaster richColors position="bottom-right" expand visibleToasts={9} duration={10000} />
               </TooltipProvider>
             </ThemeProvider>
           </QueryProvider>

@@ -8,7 +8,7 @@ import { EmptyState } from "@/components/shared/empty-state"
 import { Dialog, DialogContent, DialogHeader, DialogTitle } from "@/components/ui/dialog"
 import { Label } from "@/components/ui/label"
 import { Tooltip, TooltipContent, TooltipTrigger } from "@/components/ui/tooltip"
-import { Plus, Loader2, Eye, X, Bell, BellRing, BellDot, Sparkles } from "lucide-react"
+import { Plus, Loader2, Eye, X, Bell, BellRing, BellDot, Sparkles, XCircle } from "lucide-react"
 import { toast } from "sonner"
 import { formatPercent } from "@/lib/utils"
 import {
@@ -149,6 +149,25 @@ function LastSeenBadge({ days }: { days: number | null }) {
   )
 }
 
+function isToday(timestamp: number): boolean {
+  const d = new Date(timestamp * 1000)
+  const now = new Date()
+  return d.getFullYear() === now.getFullYear() &&
+    d.getMonth() === now.getMonth() &&
+    d.getDate() === now.getDate()
+}
+
+/** Returns the most recent completed session's closing price, skipping today's candle if the API included it. */
+function getLDCP(data: StockHistoryPoint[]): number {
+  if (data.length === 0) return 0
+  const last = data[data.length - 1]
+  if (isToday(last.timestamp)) {
+    // Today's in-progress candle — use the previous session
+    return data.length >= 2 ? data[data.length - 2].close : 0
+  }
+  return last.close
+}
+
 function getLast7Days(data: StockHistoryPoint[]): number[] {
   if (data.length === 0) return []
   return data.slice(-7).map((d) => d.close)
@@ -172,11 +191,20 @@ function get7DayAvgVolume(data: StockHistoryPoint[]): number | null {
   return total / sessions.length
 }
 
-function HiLo({ high, low, price }: { high: number; low: number; price: number }) {
+function get7DayMedianVolume(data: StockHistoryPoint[]): number | null {
+  if (data.length < 2) return null
+  const sessions = data.slice(-8, -1)
+  if (sessions.length === 0) return null
+  const sorted = sessions.map((d) => d.volume).sort((a, b) => a - b)
+  const mid = Math.floor(sorted.length / 2)
+  return sorted.length % 2 !== 0 ? sorted[mid] : (sorted[mid - 1] + sorted[mid]) / 2
+}
+
+function HiLo({ high, low, ldcp }: { high: number; low: number; ldcp: number }) {
   if (high === 0 && low === 0) return <span className="text-muted-foreground/40">-</span>
   const fmt = (n: number) => n.toLocaleString("en-PK", { minimumFractionDigits: 2, maximumFractionDigits: 2 })
-  const highPct = price > 0 ? ((high - price) / price) * 100 : null
-  const lowPct = price > 0 ? ((low - price) / price) * 100 : null
+  const highPct = ldcp > 0 ? ((high - ldcp) / ldcp) * 100 : null
+  const lowPct = ldcp > 0 ? ((low - ldcp) / ldcp) * 100 : null
   return (
     <span className="tabular-nums text-sm space-y-0.5 block text-right">
       <span className="block text-green-500">
@@ -189,60 +217,60 @@ function HiLo({ high, low, price }: { high: number; low: number; price: number }
   )
 }
 
-function VolumeCell({ liveVol, avgVol }: { liveVol: number; avgVol: number | null }) {
-  if (liveVol === 0) return <span className="text-muted-foreground/40">-</span>
-  if (!avgVol || avgVol === 0) {
-    return (
-      <span className="tabular-nums text-muted-foreground">
-        {liveVol.toLocaleString("en-PK")}
-      </span>
-    )
-  }
-  const pct = ((liveVol - avgVol) / avgVol) * 100
-  const color = pct >= 0 ? "text-green-500" : "text-red-500"
-  const sign = pct >= 0 ? "+" : ""
-  const tooltip = `Today: ${liveVol.toLocaleString("en-PK")} | 7d avg: ${Math.round(avgVol).toLocaleString("en-PK")}`
-  return (
-    <span className={`tabular-nums ${color}`} title={tooltip}>
-      {sign}{pct.toFixed(0)}%
-    </span>
-  )
+
+// Shared AudioContext — created once on first user gesture so iOS unlocks it
+let _audioCtx: AudioContext | null = null
+function getAudioCtx(): AudioContext | null {
+  if (typeof window === "undefined") return null
+  try {
+    if (!_audioCtx) _audioCtx = new AudioContext()
+    return _audioCtx
+  } catch { return null }
 }
 
 function playAlertChime(up: boolean) {
-  if (typeof window === "undefined") return
-  try {
-    const ctx = new AudioContext()
-    const gain = ctx.createGain()
-    gain.connect(ctx.destination)
+  const ctx = getAudioCtx()
+  if (!ctx) return
 
-    // Two-note chime: root then fifth up (up alert) or root then minor third down (down alert)
-    const notes = up
-      ? [{ freq: 880, start: 0 }, { freq: 1320, start: 0.12 }]   // A5 → E6
-      : [{ freq: 880, start: 0 }, { freq: 698, start: 0.12 }]    // A5 → F5
+  const notes = up
+    ? [{ freq: 880, start: 0 }, { freq: 1320, start: 0.12 }]  // A5 → E6
+    : [{ freq: 880, start: 0 }, { freq: 698, start: 0.12 }]   // A5 → F5
 
-    for (const { freq, start } of notes) {
-      const osc = ctx.createOscillator()
-      const env = ctx.createGain()
-      osc.type = "sine"
-      osc.frequency.value = freq
-      osc.connect(env)
-      env.connect(gain)
-      env.gain.setValueAtTime(0, ctx.currentTime + start)
-      env.gain.linearRampToValueAtTime(0.25, ctx.currentTime + start + 0.01)
-      env.gain.exponentialRampToValueAtTime(0.001, ctx.currentTime + start + 0.35)
-      osc.start(ctx.currentTime + start)
-      osc.stop(ctx.currentTime + start + 0.35)
-    }
-  } catch {
-    // AudioContext not available — silently skip
+  const doPlay = () => {
+    try {
+      const gain = ctx.createGain()
+      gain.connect(ctx.destination)
+      for (const { freq, start } of notes) {
+        const osc = ctx.createOscillator()
+        const env = ctx.createGain()
+        osc.type = "sine"
+        osc.frequency.value = freq
+        osc.connect(env)
+        env.connect(gain)
+        env.gain.setValueAtTime(0, ctx.currentTime + start)
+        env.gain.linearRampToValueAtTime(0.25, ctx.currentTime + start + 0.01)
+        env.gain.exponentialRampToValueAtTime(0.001, ctx.currentTime + start + 0.35)
+        osc.start(ctx.currentTime + start)
+        osc.stop(ctx.currentTime + start + 0.35)
+      }
+    } catch { /* silently skip */ }
+  }
+
+  // iOS starts AudioContext in "suspended" — resume() unlocks it
+  if (ctx.state === "suspended") {
+    ctx.resume().then(doPlay).catch(() => {})
+  } else {
+    doPlay()
   }
 }
 
-function sendNotification(symbol: string, changePct: number, price: number) {
+function sendNotification(symbol: string, changePct: number, price: number, ldcp?: number) {
   const sign = changePct >= 0 ? "+" : ""
   const priceStr = price.toLocaleString("en-PK", { minimumFractionDigits: 2, maximumFractionDigits: 2 })
-  const msg = `${symbol} ${sign}${changePct.toFixed(2)}% — PKR ${priceStr}`
+  const dodStr = ldcp && ldcp > 0
+    ? ` · DoD ${((price - ldcp) / ldcp * 100) >= 0 ? "+" : ""}${((price - ldcp) / ldcp * 100).toFixed(2)}%`
+    : ""
+  const msg = `${symbol} ${sign}${changePct.toFixed(2)}%${dodStr} — PKR ${priceStr}`
 
   playAlertChime(changePct >= 0)
 
@@ -392,6 +420,7 @@ export function WatchlistTab() {
   const sparklineMap = new Map<string, number[]>()
   const daysAtPriceMap = new Map<string, number | null>()
   const volAvgMap = new Map<string, number | null>()
+  const volMedMap = new Map<string, number | null>()
   const avgPriceMap = new Map<string, number | null>()
   const ldcpMap = new Map<string, number>()
   if (histories) {
@@ -401,8 +430,9 @@ export function WatchlistTab() {
       const currentPrice = livePriceMap.get(h.symbol)?.price ?? 0
       daysAtPriceMap.set(h.symbol, computeDaysAtCurrentPrice(currentPrice, h.data))
       volAvgMap.set(h.symbol, get7DayAvgVolume(h.data))
+      volMedMap.set(h.symbol, get7DayMedianVolume(h.data))
       avgPriceMap.set(h.symbol, get1YAvgPrice(h.data))
-      ldcpMap.set(h.symbol, h.data.length > 0 ? h.data[h.data.length - 1].close : 0)
+      ldcpMap.set(h.symbol, getLDCP(h.data))
     }
   }
 
@@ -488,7 +518,7 @@ export function WatchlistTab() {
 
       const changePct = ((lp.price - entry.refPrice) / entry.refPrice) * 100
       if (Math.abs(changePct) >= entry.threshold) {
-        sendNotification(lp.symbol, changePct, lp.price)
+        sendNotification(lp.symbol, changePct, lp.price, ldcpMap.get(lp.symbol))
         // Roll the base price forward to the triggered price so the next
         // alert fires when the price moves another ±threshold% from here
         setAlertPrices((prev) => {
@@ -506,33 +536,35 @@ export function WatchlistTab() {
 
   return (
     <div className="space-y-6">
-      <div className="flex gap-2 items-center justify-between">
+      <div className="flex flex-col gap-2">
+        {/* Row 1 — input + add */}
         <div className="flex gap-2 items-center">
-        <Input
-          placeholder="Add stock symbol (e.g. LUCK)"
-          value={symbolInput}
-          onChange={(e) => setSymbolInput(e.target.value.toUpperCase())}
-          onKeyDown={(e) => {
-            if (e.key === "Enter") {
-              e.preventDefault()
-              handleAdd()
-            }
-          }}
-          className="max-w-xs"
-        />
-        <Button
-          size="sm"
-          onClick={handleAdd}
-          disabled={addMutation.isPending || !symbolInput.trim()}
-        >
-          {addMutation.isPending ? (
-            <Loader2 className="h-4 w-4 animate-spin" />
-          ) : (
-            <Plus className="h-4 w-4 mr-1" />
-          )}
-          {addMutation.isPending ? "Adding..." : "Add"}
-        </Button>
+          <Input
+            placeholder="Add stock symbol (e.g. LUCK)"
+            value={symbolInput}
+            onChange={(e) => setSymbolInput(e.target.value.toUpperCase())}
+            onKeyDown={(e) => {
+              if (e.key === "Enter") {
+                e.preventDefault()
+                handleAdd()
+              }
+            }}
+            className="max-w-xs"
+          />
+          <Button
+            size="sm"
+            onClick={handleAdd}
+            disabled={addMutation.isPending || !symbolInput.trim()}
+          >
+            {addMutation.isPending ? (
+              <Loader2 className="h-4 w-4 animate-spin" />
+            ) : (
+              <Plus className="h-4 w-4 mr-1" />
+            )}
+            {addMutation.isPending ? "Adding..." : "Add"}
+          </Button>
         </div>
+        {/* Row 2 — actions */}
         <div className="flex items-center gap-2">
           {symbols.length > 0 && (
             <Button
@@ -541,8 +573,8 @@ export function WatchlistTab() {
               onClick={() => { setThresholdInput("0.5"); setAlertDialog({ symbol: "__all__", price: 0 }) }}
               title="Set price alert for all watchlist symbols at once"
             >
-              <BellRing className="h-3.5 w-3.5 mr-1.5" />
-              Alert All
+              <BellRing className="h-3.5 w-3.5 sm:mr-1.5" />
+              <span className="hidden sm:inline">Alert All</span>
             </Button>
           )}
           <Button
@@ -552,12 +584,16 @@ export function WatchlistTab() {
             title={showFetchGlow ? "Disable fetch glow" : "Enable fetch glow"}
             className={showFetchGlow ? "border-yellow-500/50 text-yellow-500 hover:text-yellow-400" : ""}
           >
-            <Sparkles className="h-3.5 w-3.5 mr-1.5" />
-            Glow
+            <Sparkles className="h-3.5 w-3.5 sm:mr-1.5" />
+            <span className="hidden sm:inline">Glow</span>
           </Button>
           <Button size="sm" variant="outline" onClick={fireTestAlert} title="Send a test notification to verify alerts are working">
-            <BellDot className="h-3.5 w-3.5 mr-1.5" />
-            Test Alert
+            <BellDot className="h-3.5 w-3.5 sm:mr-1.5" />
+            <span className="hidden sm:inline">Test Alert</span>
+          </Button>
+          <Button size="sm" variant="outline" onClick={() => toast.dismiss()} title="Clear all notifications">
+            <XCircle className="h-3.5 w-3.5 sm:mr-1.5" />
+            <span className="hidden sm:inline">Clear</span>
           </Button>
         </div>
       </div>
@@ -602,16 +638,14 @@ export function WatchlistTab() {
                   const fmt = (n: number) => n.toLocaleString("en-PK", { minimumFractionDigits: 2, maximumFractionDigits: 2 })
                   const pct = (n: number) => `${n >= 0 ? "+" : ""}${n.toFixed(2)}%`
 
-                  const highPct = price > 0 && high > 0 ? ((high - price) / price) * 100 : null
-                  const lowPct = price > 0 && low > 0 ? ((low - price) / price) * 100 : null
+                  const highPct = ldcp > 0 && high > 0 ? ((high - ldcp) / ldcp) * 100 : null
+                  const lowPct = ldcp > 0 && low > 0 ? ((low - ldcp) / ldcp) * 100 : null
                   const avgPct = price > 0 && avg ? ((price - avg) / avg) * 100 : null
 
                   const int = (n: number) => Math.round(n).toLocaleString("en-PK")
                   const liveVol = lp?.volume ?? 0
                   const avgVol = volAvgMap.get(symbol) ?? null
-                  const volPct = liveVol > 0 && avgVol && avgVol > 0
-                    ? ((liveVol - avgVol) / avgVol) * 100
-                    : null
+                  const medVol = volMedMap.get(symbol) ?? null
 
                   return (
                     <div
@@ -692,23 +726,25 @@ export function WatchlistTab() {
                         )}
                       </div>
 
-                      {/* Vol vs 7D Avg + RVOL */}
-                      {volPct != null && (
+                      {/* RVOL (avg) + RVOL (med) */}
+                      {liveVol > 0 && (avgVol || medVol) && (
                         <div className="space-y-0.5 border-t pt-1">
-                          <div className="flex items-center justify-between">
-                            <span className="text-muted-foreground">Vol vs 7D Avg</span>
-                            <span className={`tabular-nums ${volPct >= 0 ? "text-green-500" : "text-red-500"}`}>
-                              {volPct >= 0 ? "+" : ""}{volPct.toFixed(0)}%
-                            </span>
-                          </div>
-                          {(() => {
-                            const avgVol = volAvgMap.get(symbol) ?? null
-                            if (!liveVol || !avgVol || avgVol === 0) return null
+                          {avgVol && avgVol > 0 && (() => {
                             const rvol = liveVol / avgVol
                             const color = rvol >= 2 ? "text-green-500" : rvol >= 1 ? "" : "text-muted-foreground"
                             return (
                               <div className="flex items-center justify-between">
-                                <span className="text-muted-foreground">RVOL</span>
+                                <span className="text-muted-foreground">RVOL (avg)</span>
+                                <span className={`tabular-nums ${color}`}>{rvol.toFixed(2)}x</span>
+                              </div>
+                            )
+                          })()}
+                          {medVol && medVol > 0 && (() => {
+                            const rvol = liveVol / medVol
+                            const color = rvol >= 2 ? "text-green-500" : rvol >= 1 ? "" : "text-muted-foreground"
+                            return (
+                              <div className="flex items-center justify-between">
+                                <span className="text-muted-foreground">RVOL (med)</span>
                                 <span className={`tabular-nums ${color}`}>{rvol.toFixed(2)}x</span>
                               </div>
                             )
@@ -755,10 +791,10 @@ export function WatchlistTab() {
                       <ColHeader label="YoxY" full="Year-over-Year (Multi-Year)" description="Annual return from 1 to 5 years ago plus all-time. Hover the value to expand." formula="(Price − Priceₙ years ago) ÷ Priceₙ years ago × 100" />
                     </th>
                     <th className="text-right font-medium text-muted-foreground px-2 py-2.5 hidden lg:table-cell">
-                      <ColHeader label="RVOL" full="Relative Volume" description="Today's volume relative to the 7-session average. Above 2x signals elevated activity." formula="Today's Volume ÷ 7D Avg Volume" />
+                      <ColHeader label="RVOL (avg)" full="Relative Volume (Average)" description="Today's volume relative to the 7-session average. Above 2x signals elevated activity." formula="Today's Volume ÷ 7D Avg Volume" />
                     </th>
                     <th className="text-right font-medium text-muted-foreground px-2 py-2.5 hidden lg:table-cell">
-                      <ColHeader label="Vol vs 7D Avg" full="Volume vs 7-Day Average" description="Percentage difference between today's volume and the average of the last 7 sessions." formula="(Today's Volume − 7D Avg) ÷ 7D Avg × 100" />
+                      <ColHeader label="RVOL (med)" full="Relative Volume (Median)" description="Today's volume relative to the 7-session median. Less sensitive to outlier days than the average." formula="Today's Volume ÷ 7D Median Volume" />
                     </th>
                     <th className="text-right font-medium text-muted-foreground px-2 py-2.5 hidden md:table-cell">
                       <ColHeader label="Last 7d" full="Last 7 Trading Days" description="Sparkline of closing prices over the past 7 completed trading sessions." />
@@ -831,7 +867,7 @@ export function WatchlistTab() {
                               {ldcp > 0 ? fmtPrice(ldcp) : <span className="text-muted-foreground/40">—</span>}
                             </td>
                             <td className="px-2 py-2.5 text-right hidden md:table-cell">
-                              <HiLo high={lp?.dayHigh ?? 0} low={lp?.dayLow ?? 0} price={price} />
+                              <HiLo high={lp?.dayHigh ?? 0} low={lp?.dayLow ?? 0} ldcp={ldcp} />
                             </td>
                             <td className="px-2 py-2.5 text-right tabular-nums text-sm">
                               <LastSeenBadge days={daysAtPriceMap.get(symbol) ?? null} />
@@ -853,8 +889,14 @@ export function WatchlistTab() {
                                 return <span className={color}>{rvol.toFixed(2)}x</span>
                               })()}
                             </td>
-                            <td className="px-2 py-2.5 text-right text-sm hidden lg:table-cell">
-                              <VolumeCell liveVol={volume} avgVol={volAvgMap.get(symbol) ?? null} />
+                            <td className="px-2 py-2.5 text-right text-sm tabular-nums hidden lg:table-cell">
+                              {(() => {
+                                const medVol = volMedMap.get(symbol) ?? null
+                                if (!volume || !medVol || medVol === 0) return <span className="text-muted-foreground/40">—</span>
+                                const rvol = volume / medVol
+                                const color = rvol >= 2 ? "text-green-500" : rvol >= 1 ? "text-foreground" : "text-muted-foreground"
+                                return <span className={color}>{rvol.toFixed(2)}x</span>
+                              })()}
                             </td>
                             <td className="px-2 py-2.5 text-right hidden md:table-cell">
                               <Sparkline points={sparklineMap.get(symbol) ?? []} width={100} />

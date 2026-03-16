@@ -170,7 +170,7 @@ export default function StockOverviewPage() {
             </div>
           </div>
 
-          <div className="grid gap-3 md:grid-cols-2">
+          <div className="grid gap-3 md:grid-cols-2 xl:grid-cols-3">
             {chartData.map((s) => {
               const isUp = s.pnl >= 0
               const barPct = Math.min(Math.abs(s.pnlPct), 100)

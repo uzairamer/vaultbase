@@ -226,32 +226,32 @@ export default function ExpensesPage() {
           {/* Summary cards */}
           <div className="grid gap-4 grid-cols-3">
             <Card className="cursor-pointer transition-shadow hover:ring-1 hover:ring-primary/50" onClick={() => setFilterType(filterType === "all" ? "all" : "all")}>
-              <CardContent className="p-4">
+              <CardContent className="p-3 sm:p-4">
                 <p className="text-xs text-muted-foreground">Net</p>
-                <p className={`text-xl font-bold ${totalInflow - totalOutflow >= 0 ? "text-green-600" : "text-red-600"}`}>
+                <p className={`text-sm sm:text-lg font-bold leading-tight truncate ${totalInflow - totalOutflow >= 0 ? "text-green-600" : "text-red-600"}`}>
                   {totalInflow - totalOutflow >= 0 ? "+" : ""}{formatCurrency(totalInflow - totalOutflow)}
                 </p>
                 <p className="text-xs text-muted-foreground">{filtered.length} transactions</p>
               </CardContent>
             </Card>
             <Card className={`cursor-pointer transition-shadow ${filterType === "inflow" ? "ring-2 ring-green-500" : "hover:ring-1 hover:ring-green-500/50"}`} onClick={() => setFilterType(filterType === "inflow" ? "all" : "inflow")}>
-              <CardContent className="p-4">
+              <CardContent className="p-3 sm:p-4">
                 <p className="text-xs text-muted-foreground">Total Inflow</p>
-                <p className="text-xl font-bold text-green-600">+{formatCurrency(totalInflow)}</p>
+                <p className="text-sm sm:text-lg font-bold text-green-600 leading-tight truncate">+{formatCurrency(totalInflow)}</p>
                 <p className="text-xs text-muted-foreground">{filtered.filter((t) => t.type === "inflow").length} transactions</p>
               </CardContent>
             </Card>
             <Card className={`cursor-pointer transition-shadow ${filterType === "outflow" ? "ring-2 ring-red-500" : "hover:ring-1 hover:ring-red-500/50"}`} onClick={() => setFilterType(filterType === "outflow" ? "all" : "outflow")}>
-              <CardContent className="p-4">
+              <CardContent className="p-3 sm:p-4">
                 <p className="text-xs text-muted-foreground">Total Outflow</p>
-                <p className="text-xl font-bold text-red-600">-{formatCurrency(totalOutflow)}</p>
+                <p className="text-sm sm:text-lg font-bold text-red-600 leading-tight truncate">-{formatCurrency(totalOutflow)}</p>
                 <p className="text-xs text-muted-foreground">{filtered.filter((t) => t.type === "outflow").length} transactions</p>
               </CardContent>
             </Card>
           </div>
 
           {/* Search + filter toggle */}
-          <div className="flex gap-2 items-center">
+          <div className="flex gap-2 items-center flex-wrap">
             <Input
               placeholder="Search description, wallet, category..."
               value={searchQuery}
@@ -369,7 +369,7 @@ export default function ExpensesPage() {
                           </div>
                         </div>
                       </div>
-                      <div className="flex items-center gap-2 shrink-0 ml-4">
+                      <div className="flex items-center gap-1.5 sm:gap-2 shrink-0 ml-2">
                         <span className={`text-sm font-semibold ${tx.type === "inflow" ? "text-green-600" : "text-red-600"}`}>
                           {tx.type === "inflow" ? "+" : "-"}{formatCurrency(Number(tx.amount))}
                         </span>

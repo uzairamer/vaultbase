@@ -1,43 +1,47 @@
 import type { StockHistoryPoint } from "../hooks"
 
 /**
- * Finds the most recent PREVIOUS occurrence of the current price level (±2%)
- * in historical daily closes, skipping the current contiguous cluster of days
- * that are already at this price.
+ * Finds the OLDEST session in available history where today's live price fell
+ * within that day's intraday high–low range, after skipping the current
+ * contiguous cluster of sessions where the price is already in range.
  *
- * Phase 1: skip consecutive recent days that are already within ±2% (the current plateau).
- * Phase 2: walk further back to find the last time the price was at this level before now.
+ * Phase 1: skip consecutive recent sessions where currentPrice ∈ [low, high]
+ *          (the current plateau — stock has been at this level continuously).
+ * Phase 2: walk all the way back through remaining history and record every
+ *          session where currentPrice ∈ [low, high], keeping only the oldest.
  *
- * Example: if the stock is at 150 today and was also at 150 in Oct 2025 before
- * rallying above, this returns the days since that Oct 2025 date — not "1 day ago."
+ * Returning the OLDEST match answers "how far back does this price level go?"
+ * rather than being fooled by a brief intraday wick that touched this price
+ * recently during a different move.
+ *
+ * Returns { days, date } of the oldest matching session, or null if not found.
  */
 export function computeDaysAtCurrentPrice(
   currentPrice: number,
   data: StockHistoryPoint[]
-): number | null {
+): { days: number; date: string } | null {
   if (!currentPrice || currentPrice === 0 || data.length < 2) return null
 
-  const low = currentPrice * 0.99
-  const high = currentPrice * 1.01
   const latestTs = data[data.length - 1].timestamp
 
   let i = data.length - 2
 
-  // Phase 1: skip the current in-range cluster (days trivially near today's price)
-  while (i >= 0 && data[i].close >= low && data[i].close <= high) {
+  // Phase 1: skip the current in-range cluster
+  while (i >= 0 && currentPrice >= data[i].low && currentPrice <= data[i].high) {
     i--
   }
 
-  // Phase 2: find the previous occurrence of this price level
+  // Phase 2: walk all the way back and keep the OLDEST match
+  let oldest: { days: number; date: string } | null = null
   while (i >= 0) {
-    const { close, timestamp } = data[i]
-    if (close >= low && close <= high) {
-      return Math.round((latestTs - timestamp) / (24 * 60 * 60))
+    const { low, high, timestamp, date } = data[i]
+    if (currentPrice >= low && currentPrice <= high) {
+      oldest = { days: Math.round((latestTs - timestamp) / (24 * 60 * 60)), date }
     }
     i--
   }
 
-  return null // price not found in available history before the current cluster
+  return oldest
 }
 
 export interface ChangeMetrics {

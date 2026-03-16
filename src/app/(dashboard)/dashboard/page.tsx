@@ -1,6 +1,6 @@
 "use client"
 
-import { useState } from "react"
+import { useState, useEffect } from "react"
 import { useQuery } from "@tanstack/react-query"
 import { useSession } from "next-auth/react"
 import { formatCurrency } from "@/lib/utils"
@@ -29,6 +29,22 @@ const SUBTYPE_LABELS: Record<string, string> = Object.fromEntries(
   [...INFLOW_SUBTYPES, ...OUTFLOW_SUBTYPES].map((s) => [s.value, s.label])
 )
 
+function useCountUp(target: number, duration = 900) {
+  const [current, setCurrent] = useState(0)
+  useEffect(() => {
+    if (target === 0) { setCurrent(0); return }
+    const startTime = performance.now()
+    const step = (now: number) => {
+      const p = Math.min((now - startTime) / duration, 1)
+      const eased = 1 - Math.pow(1 - p, 3)
+      setCurrent(Math.round(target * eased))
+      if (p < 1) requestAnimationFrame(step)
+    }
+    requestAnimationFrame(step)
+  }, [target, duration])
+  return current
+}
+
 async function fetcher(url: string) {
   const res = await fetch(url)
   if (!res.ok) throw new Error("Failed to fetch")
@@ -40,13 +56,13 @@ type LedgerFilter = "all" | "inflow" | "outflow" | "receivable_collection" | "le
 export default function DashboardPage() {
   const { data: session } = useSession()
   const [ledgerFilter, setLedgerFilter] = useState<LedgerFilter>("all")
+  const [mounted, setMounted] = useState(false)
+  useEffect(() => setMounted(true), [])
 
   const { data: txData } = useQuery({ queryKey: ["transactions"], queryFn: () => fetcher("/api/expenses/transactions") })
   const { data: receivablesData } = useQuery({ queryKey: ["receivables"], queryFn: () => fetcher("/api/expenses/receivables") })
   const { data: liabilitiesData } = useQuery({ queryKey: ["liabilities"], queryFn: () => fetcher("/api/expenses/liabilities") })
   const { data: insightsData, isLoading } = useQuery({ queryKey: ["insights"], queryFn: () => fetcher("/api/insights") })
-
-  if (isLoading) return <div className="p-6">Loading...</div>
 
   const d = (insightsData || {}) as Record<string, Record<string, unknown>[]>
   const wallets = (d.wallets || []) as Record<string, unknown>[]
@@ -68,6 +84,18 @@ export default function DashboardPage() {
 
   const totalAssets = walletBalance + realEstateValue + stocksValue + commoditiesValue + sideValue + receivablesTotal
   const netWorth = totalAssets - liabilitiesTotal
+
+  // Count-up hooks — must be called before any early return
+  const animNetWorth = useCountUp(netWorth)
+  const animWalletBalance = useCountUp(walletBalance)
+  const animReceivablesTotal = useCountUp(receivablesTotal)
+  const animLiabilitiesTotal = useCountUp(liabilitiesTotal)
+  const animRealEstateValue = useCountUp(realEstateValue)
+  const animStocksValue = useCountUp(stocksValue)
+  const animCommoditiesValue = useCountUp(commoditiesValue)
+  const animSideValue = useCountUp(sideValue)
+
+  if (isLoading) return <div className="p-6">Loading...</div>
 
   // Filter transactions for ledger
   const filteredTxs = transactions.filter((tx) => {
@@ -97,14 +125,14 @@ export default function DashboardPage() {
       <div className="grid gap-4 md:grid-cols-2 lg:grid-cols-4 mb-8">
         <StatCard
           title="Net Worth"
-          value={formatCurrency(netWorth)}
+          value={formatCurrency(animNetWorth)}
           icon={DollarSign}
           className="border-primary/20"
         />
         <button className="text-left" onClick={() => setLedgerFilter("all")}>
           <StatCard
             title="Wallet Balance"
-            value={formatCurrency(walletBalance)}
+            value={formatCurrency(animWalletBalance)}
             subtitle={`${wallets.length} wallet(s)`}
             icon={Wallet}
             className={ledgerFilter === "all" ? "ring-2 ring-primary" : "hover:ring-1 hover:ring-primary/50 transition-shadow"}
@@ -113,7 +141,7 @@ export default function DashboardPage() {
         <button className="text-left" onClick={() => setLedgerFilter(ledgerFilter === "receivable_collection" ? "all" : "receivable_collection")}>
           <StatCard
             title="Receivables"
-            value={formatCurrency(receivablesTotal)}
+            value={formatCurrency(animReceivablesTotal)}
             subtitle={`${receivables.filter((r) => r.status !== "settled").length} active`}
             icon={TrendingUp}
             className={ledgerFilter === "receivable_collection" ? "ring-2 ring-green-500" : "hover:ring-1 hover:ring-green-500/50 transition-shadow cursor-pointer"}
@@ -122,7 +150,7 @@ export default function DashboardPage() {
         <button className="text-left" onClick={() => setLedgerFilter(ledgerFilter === "lending" ? "all" : "lending")}>
           <StatCard
             title="Liabilities"
-            value={formatCurrency(liabilitiesTotal)}
+            value={formatCurrency(animLiabilitiesTotal)}
             subtitle={`${liabilities.filter((l) => l.status !== "settled").length} active`}
             icon={TrendingDown}
             className={ledgerFilter === "lending" ? "ring-2 ring-red-500" : "hover:ring-1 hover:ring-red-500/50 transition-shadow cursor-pointer"}
@@ -132,25 +160,25 @@ export default function DashboardPage() {
 
       <h2 className="text-xl font-semibold mb-4">Investment Breakdown</h2>
       <div className="grid gap-4 md:grid-cols-2 lg:grid-cols-4 mb-8">
-        <StatCard title="Real Estate" value={formatCurrency(realEstateValue)} subtitle={`${properties.length} properties`} icon={Building2} />
-        <StatCard title="Stocks" value={formatCurrency(stocksValue)} subtitle={`${stocks.length} holdings`} icon={BarChart3} />
-        <StatCard title="Commodities" value={formatCurrency(commoditiesValue)} subtitle={`${commodities.length} holdings`} icon={Gem} />
-        <StatCard title="Side Investments" value={formatCurrency(sideValue)} subtitle={`${sideInvestments.filter((s) => s.status === "active").length} active`} icon={Briefcase} />
+        <StatCard title="Real Estate" value={formatCurrency(animRealEstateValue)} subtitle={`${properties.length} properties`} icon={Building2} />
+        <StatCard title="Stocks" value={formatCurrency(animStocksValue)} subtitle={`${stocks.length} holdings`} icon={BarChart3} />
+        <StatCard title="Commodities" value={formatCurrency(animCommoditiesValue)} subtitle={`${commodities.length} holdings`} icon={Gem} />
+        <StatCard title="Side Investments" value={formatCurrency(animSideValue)} subtitle={`${sideInvestments.filter((s) => s.status === "active").length} active`} icon={Briefcase} />
       </div>
 
       {/* Transactions Ledger */}
       <Card className="mb-8">
-        <CardHeader className="flex flex-row items-center justify-between">
-          <div>
-            <CardTitle className="text-base">{filterLabel[ledgerFilter]}</CardTitle>
-            <p className="text-xs text-muted-foreground mt-1">{filteredTxs.length} transaction(s)</p>
+        <CardHeader className="flex flex-col gap-2">
+          <div className="flex items-center justify-between">
+            <div>
+              <CardTitle className="text-base">{filterLabel[ledgerFilter]}</CardTitle>
+              <p className="text-xs text-muted-foreground mt-1">{filteredTxs.length} transaction(s)</p>
+            </div>
+            <Link href="/expenses">
+              <Button variant="outline" size="sm" className="text-xs">Full view</Button>
+            </Link>
           </div>
-          <div className="flex items-center gap-2">
-            {ledgerFilter !== "all" && (
-              <Button variant="ghost" size="sm" onClick={() => setLedgerFilter("all")}>
-                Clear filter
-              </Button>
-            )}
+          <div className="flex items-center gap-2 flex-wrap">
             <div className="flex gap-1">
               {(["all", "inflow", "outflow"] as LedgerFilter[]).map((f) => (
                 <Button
@@ -164,9 +192,11 @@ export default function DashboardPage() {
                 </Button>
               ))}
             </div>
-            <Link href="/expenses">
-              <Button variant="outline" size="sm" className="text-xs">Full view</Button>
-            </Link>
+            {ledgerFilter !== "all" && (
+              <Button variant="ghost" size="sm" onClick={() => setLedgerFilter("all")} className="text-xs">
+                Clear filter
+              </Button>
+            )}
           </div>
         </CardHeader>
         <CardContent>
@@ -179,9 +209,9 @@ export default function DashboardPage() {
             </p>
           ) : (
             <div className="space-y-2">
-              {filteredTxs.slice(0, 20).map((tx) => (
-                <div key={tx.id as string} className="flex items-center justify-between py-2 border-b last:border-0">
-                  <div className="flex items-center gap-3">
+              {filteredTxs.slice(0, 10).map((tx) => (
+                <div key={tx.id as string} className="flex items-center justify-between py-2 border-b last:border-0 gap-2">
+                  <div className="flex items-center gap-3 flex-1 min-w-0">
                     <div className={`flex h-8 w-8 items-center justify-center rounded-full shrink-0 ${tx.type === "inflow" ? "bg-green-100 dark:bg-green-950" : "bg-red-100 dark:bg-red-950"}`}>
                       {tx.type === "inflow" ? (
                         <ArrowDownLeft className="h-4 w-4 text-green-600 dark:text-green-400" />
@@ -193,10 +223,10 @@ export default function DashboardPage() {
                       <p className="text-sm font-medium truncate">
                         {(tx.description as string) || SUBTYPE_LABELS[tx.subType as string] || (tx.type === "inflow" ? "Inflow" : "Outflow")}
                       </p>
-                      <div className="flex items-center gap-2 text-xs text-muted-foreground">
-                        <span>{(tx.wallet as Record<string, string>)?.name || ""}</span>
+                      <div className="flex flex-wrap items-center gap-x-1.5 gap-y-0.5 text-xs text-muted-foreground">
+                        <span className="whitespace-nowrap">{(tx.wallet as Record<string, string>)?.name || ""}</span>
                         <span>·</span>
-                        <span>{format(new Date(tx.date as string), "MMM dd, yyyy")}</span>
+                        <span className="whitespace-nowrap">{format(new Date(tx.date as string), "MMM dd, yyyy")}</span>
                         {tx.subType ? (
                           <>
                             <span>·</span>
@@ -206,12 +236,12 @@ export default function DashboardPage() {
                       </div>
                     </div>
                   </div>
-                  <span className={`text-sm font-medium shrink-0 ml-4 ${tx.type === "inflow" ? "text-green-600" : "text-red-600"}`}>
+                  <span className={`text-sm font-medium shrink-0 ${tx.type === "inflow" ? "text-green-600" : "text-red-600"}`}>
                     {tx.type === "inflow" ? "+" : "-"}{formatCurrency(Number(tx.amount))}
                   </span>
                 </div>
               ))}
-              {filteredTxs.length > 20 && (
+              {filteredTxs.length > 10 && (
                 <div className="text-center pt-2">
                   <Link href="/expenses" className="text-xs text-primary hover:underline">
                     View all {filteredTxs.length} transactions
@@ -236,22 +266,22 @@ export default function DashboardPage() {
               { label: "Stocks", value: stocksValue, color: "bg-purple-500" },
               { label: "Commodities", value: commoditiesValue, color: "bg-yellow-500" },
               { label: "Side Investments", value: sideValue, color: "bg-orange-500" },
-            ].map((item) => {
+            ].map((item, index) => {
               const pct = totalAssets > 0 ? (item.value / totalAssets) * 100 : 0
               return (
-                <div key={item.label} className="flex items-center gap-3">
-                  <div className={`h-3 w-3 rounded-full ${item.color}`} />
-                  <span className="text-sm w-32">{item.label}</span>
-                  <div className="flex-1 h-2 bg-muted rounded-full overflow-hidden">
+                <div key={item.label} className="flex items-center gap-3 min-w-0">
+                  <div className={`h-3 w-3 rounded-full shrink-0 ${item.color}`} />
+                  <span className="text-sm shrink-0 w-24 sm:w-32">{item.label}</span>
+                  <div className="flex-1 h-2 bg-muted rounded-full overflow-hidden min-w-0">
                     <div
-                      className={`h-full ${item.color} rounded-full`}
-                      style={{ width: `${pct}%` }}
+                      className={`h-full ${item.color} rounded-full transition-all duration-1000 ease-out`}
+                      style={{ width: mounted ? `${pct}%` : "0%", transitionDelay: `${index * 150}ms` }}
                     />
                   </div>
-                  <span className="text-sm text-muted-foreground w-16 text-right">
+                  <span className="text-sm text-muted-foreground shrink-0 text-right w-12 sm:w-16">
                     {pct.toFixed(1)}%
                   </span>
-                  <span className="text-sm font-medium w-28 text-right">
+                  <span className="text-sm font-medium shrink-0 text-right w-24 sm:w-28">
                     {formatCurrency(item.value)}
                   </span>
                 </div>

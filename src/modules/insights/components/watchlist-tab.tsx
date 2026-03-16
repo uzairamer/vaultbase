@@ -112,37 +112,36 @@ function formatDaysAgo(days: number): string {
   return `${years.toFixed(1)}y ago`
 }
 
-function LastSeenBadge({ days }: { days: number | null }) {
-  if (days === null) {
+function LastSeenBadge({ result }: { result: { days: number; date: string } | null }) {
+  if (result === null) {
     return (
       <span
         className="inline-flex items-center rounded px-1.5 py-0.5 text-sm font-medium bg-purple-500/10 text-purple-400"
-        title="Price not seen before in available history at this level (±1% range)"
+        title="Current price not found in available history — may be at an all-time level"
       >
         ATL
       </span>
     )
   }
 
+  const { days, date } = result
+
   // Colour the badge based on how far back the price was last seen
   let cls: string
   if (days >= 365) {
-    cls = "bg-red-500/10 text-red-400"        // multi-year low — significant
+    cls = "bg-red-500/10 text-red-400"        // multi-year level — significant
   } else if (days >= 90) {
-    cls = "bg-orange-500/10 text-orange-400"  // 3-month low
+    cls = "bg-orange-500/10 text-orange-400"  // 3-month level
   } else if (days >= 30) {
-    cls = "bg-yellow-500/10 text-yellow-400"  // 1-month low
+    cls = "bg-yellow-500/10 text-yellow-400"  // 1-month level
   } else {
     cls = "bg-muted text-muted-foreground"    // recently seen — unremarkable
   }
 
-  const date = new Date(Date.now() - days * 24 * 60 * 60 * 1000)
-  const dateStr = date.toLocaleDateString("en-PK", { day: "numeric", month: "short", year: "numeric" })
-
   return (
     <span
       className={`inline-flex items-center rounded px-1.5 py-0.5 text-sm font-medium ${cls}`}
-      title={`${dateStr} (~${days}d ago, ±1% range)`}
+      title={`Price level established as far back as ${date} (${days}d ago) — oldest session where today's price fell within the intraday high–low range`}
     >
       {formatDaysAgo(days)}
     </span>
@@ -265,23 +264,38 @@ function playAlertChime(up: boolean) {
 }
 
 function sendNotification(symbol: string, changePct: number, price: number, ldcp?: number) {
-  const sign = changePct >= 0 ? "+" : ""
   const priceStr = price.toLocaleString("en-PK", { minimumFractionDigits: 2, maximumFractionDigits: 2 })
-  const dodStr = ldcp && ldcp > 0
-    ? ` · DoD ${((price - ldcp) / ldcp * 100) >= 0 ? "+" : ""}${((price - ldcp) / ldcp * 100).toFixed(2)}%`
-    : ""
-  const msg = `${symbol} ${sign}${changePct.toFixed(2)}%${dodStr} — PKR ${priceStr}`
+  const alertSign = changePct >= 0 ? "+" : ""
+  const dod = ldcp && ldcp > 0 ? (price - ldcp) / ldcp * 100 : null
+  const dodSign = dod != null ? (dod >= 0 ? "+" : "") : ""
+
+  // Plain string for system notification
+  const plainMsg = `${symbol} ${alertSign}${changePct.toFixed(2)}%${dod != null ? ` · DoD ${dodSign}${dod.toFixed(2)}%` : ""} — PKR ${priceStr}`
+
+  // JSX for toast — bold figures, colored DoD
+  const toastMsg = (
+    <span>
+      <b>{symbol}</b>{" "}
+      <b>{alertSign}{changePct.toFixed(2)}%</b>
+      {dod != null && (
+        <span className={dod >= 0 ? "text-green-700" : "text-red-700"}>
+          {" · DoD "}<b>{dodSign}{dod.toFixed(2)}%</b>
+        </span>
+      )}
+      {" — PKR "}<b>{priceStr}</b>
+    </span>
+  )
 
   playAlertChime(changePct >= 0)
 
   if (changePct >= 0) {
-    toast.success(`Price alert: ${msg}`, { duration: 15000 })
+    toast.success(toastMsg, { duration: 15000 })
   } else {
-    toast.error(`Price alert: ${msg}`, { duration: 15000 })
+    toast.error(toastMsg, { duration: 15000 })
   }
 
   if (typeof window !== "undefined" && "Notification" in window && Notification.permission === "granted") {
-    new Notification(`${symbol} price alert`, { body: msg })
+    new Notification(`${symbol} price alert`, { body: plainMsg })
   }
 }
 
@@ -418,7 +432,7 @@ export function WatchlistTab() {
 
   const metricsMap = new Map<string, ReturnType<typeof computeChangeMetrics>>()
   const sparklineMap = new Map<string, number[]>()
-  const daysAtPriceMap = new Map<string, number | null>()
+  const daysAtPriceMap = new Map<string, { days: number; date: string } | null>()
   const volAvgMap = new Map<string, number | null>()
   const volMedMap = new Map<string, number | null>()
   const avgPriceMap = new Map<string, number | null>()
@@ -492,17 +506,25 @@ export function WatchlistTab() {
 
   const fireTestAlert = async () => {
     playAlertChime(true)
-    // Toast always works — fire it immediately
-    toast.success("Price alert: LUCK +2.50% — PKR 155.00 (test)", { duration: 15000 })
+    toast.success(
+      <span>
+        <b>LUCK</b>{" "}
+        <b>+2.50%</b>
+        <span className="text-green-700">
+          {" · DoD "}<b>+1.23%</b>
+        </span>
+        {" — PKR "}<b>155.00</b>
+      </span>,
+      { duration: 15000 }
+    )
 
-    // Also try browser notification
     if (typeof window !== "undefined" && "Notification" in window) {
       if (Notification.permission === "default") {
         await Notification.requestPermission()
       }
       if (Notification.permission === "granted") {
         new Notification("Vaultbase price alert — test", {
-          body: "LUCK +2.50% — PKR 155.00 (test notification)",
+          body: "LUCK +2.50% · DoD +1.23% — PKR 155.00 (test notification)",
         })
       }
     }
@@ -775,7 +797,7 @@ export function WatchlistTab() {
                       <ColHeader label="H / L" full="Day High / Day Low" description="The highest and lowest prices traded in today's session, with percentage distance from current price." />
                     </th>
                     <th className="text-right font-medium text-muted-foreground px-2 py-2.5">
-                      <ColHeader label="Last seen" full="Last Seen at This Price" description="How long ago the stock last traded within ±1% of its current price. Longer = more unusual level." />
+                      <ColHeader label="Last seen" full="Price Level Age" description="How far back this price level goes — the oldest session where today's price fell within the intraday high–low range. Hover the badge for the exact date. Further back = more historically significant level." />
                     </th>
                     {SHORT_METRIC_KEYS.map((key) => {
                       const tip = METRIC_TOOLTIPS[key]
@@ -870,7 +892,7 @@ export function WatchlistTab() {
                               <HiLo high={lp?.dayHigh ?? 0} low={lp?.dayLow ?? 0} ldcp={ldcp} />
                             </td>
                             <td className="px-2 py-2.5 text-right tabular-nums text-sm">
-                              <LastSeenBadge days={daysAtPriceMap.get(symbol) ?? null} />
+                              <LastSeenBadge result={daysAtPriceMap.get(symbol) ?? null} />
                             </td>
                             {SHORT_METRIC_KEYS.map((key) => (
                               <td key={key} className="px-1.5 py-2.5 text-right tabular-nums text-sm">

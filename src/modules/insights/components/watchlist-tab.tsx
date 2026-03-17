@@ -393,6 +393,25 @@ export function WatchlistTab() {
     return () => { for (const t of flashTimersRef.current.values()) clearTimeout(t) }
   }, [])
 
+  // Pre-unlock AudioContext on first user gesture — required for iOS/Safari
+  // Without this, AudioContext stays "suspended" and programmatic resume() is rejected
+  useEffect(() => {
+    const unlock = () => {
+      const ctx = getAudioCtx()
+      if (ctx && ctx.state === "suspended") {
+        ctx.resume().catch(() => {})
+      }
+      document.removeEventListener("touchstart", unlock)
+      document.removeEventListener("click", unlock)
+    }
+    document.addEventListener("touchstart", unlock, { passive: true })
+    document.addEventListener("click", unlock, { passive: true })
+    return () => {
+      document.removeEventListener("touchstart", unlock)
+      document.removeEventListener("click", unlock)
+    }
+  }, [])
+
   // Fade-in → spin → fade-out glow lifecycle
   useEffect(() => {
     const prev = prevFetchingRef.current

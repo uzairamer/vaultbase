@@ -22,6 +22,9 @@ import {
   Eye,
   Calculator,
   History,
+  Settings,
+  KeyRound,
+  BookOpen,
 } from "lucide-react"
 import {
   Sidebar,
@@ -83,15 +86,24 @@ const navItems: NavItem[] = [
         href: "/insights/stocks",
         icon: LineChart,
         children: [
-          { title: "Overview", href: "/insights/stocks", icon: BarChart3 },
-          { title: "Historical", href: "/insights/stocks/historical", icon: History },
+          { title: "Company Profile", href: "/insights/stocks/company-profile", icon: BookOpen },
           { title: "Heatmap", href: "/insights/stocks/heatmap", icon: BarChart },
-          { title: "Watchlist", href: "/insights/stocks/watchlist", icon: Eye },
+          { title: "Historical", href: "/insights/stocks/historical", icon: History },
+          { title: "Overview", href: "/insights/stocks", icon: BarChart3 },
           { title: "SIP Simulator", href: "/insights/stocks/sip", icon: Calculator },
+          { title: "Watchlist", href: "/insights/stocks/watchlist", icon: Eye },
         ],
       },
       { title: "Commodities", href: "/insights/commodities", icon: BarChart },
       { title: "Expenses", href: "/insights/expenses", icon: PieChart },
+    ],
+  },
+  {
+    title: "Settings",
+    href: "/settings/configs",
+    icon: Settings,
+    children: [
+      { title: "Configs", href: "/settings/configs", icon: KeyRound },
     ],
   },
 ]

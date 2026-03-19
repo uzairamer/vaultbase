@@ -6,4 +6,5 @@ services:
         NEXTAUTH_SECRET: ${NEXTAUTH_SECRET}
     environment:
       NODE_ENV: production
+      AUTH_TRUST_HOST: "true"
     command: sh -c "node node_modules/prisma/build/index.js migrate deploy && node server.js"

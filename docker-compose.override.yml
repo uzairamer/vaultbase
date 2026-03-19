@@ -8,4 +8,4 @@ services:
       - .:/app
       - /app/node_modules
       - /app/.next
-    command: sh -c "npx prisma migrate deploy && npm run dev"
+    command: sh -c "node node_modules/prisma/build/index.js migrate deploy && npm run dev"

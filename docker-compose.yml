@@ -19,7 +19,6 @@ services:
   app:
     build:
       context: .
-      target: dev
     restart: unless-stopped
     ports:
       - "7190:3000"
@@ -27,12 +26,6 @@ services:
       DATABASE_URL: postgresql://vaultbase:vaultbase_secret@db:5432/vaultbase
       NEXTAUTH_URL: http://localhost:7190
       NEXTAUTH_SECRET: super-secret-change-me-in-production
-      WATCHPACK_POLLING: "true"
-    volumes:
-      - .:/app
-      - /app/node_modules
-      - /app/.next
-    command: sh -c "npx prisma migrate deploy && npm run dev"
     depends_on:
       db:
         condition: service_healthy

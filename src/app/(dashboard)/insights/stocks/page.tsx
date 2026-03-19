@@ -4,10 +4,11 @@ import { useEffect, useState } from "react"
 import { useInsightsData, useLivePrices } from "@/modules/insights/hooks"
 import { PageHeader } from "@/components/shared/page-header"
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card"
-import { formatCurrency, formatPercent } from "@/lib/utils"
+import { formatCurrency, formatPercent, cn } from "@/lib/utils"
 import {
   BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip,
   ResponsiveContainer, Cell, Legend,
+  PieChart, Pie,
 } from "recharts"
 
 function BarChartTooltip({ active, payload }: { active?: boolean; payload?: { payload: Record<string, number> }[] }) {
@@ -42,6 +43,162 @@ function BarChartTooltip({ active, payload }: { active?: boolean; payload?: { pa
         </div>
       </div>
     </div>
+  )
+}
+
+const PIE_COLORS = [
+  "#6366f1", "#22d3ee", "#f59e0b", "#ec4899", "#84cc16",
+  "#f97316", "#a78bfa", "#2dd4bf", "#fb7185", "#34d399",
+  "#60a5fa", "#fbbf24", "#c084fc", "#4ade80", "#38bdf8",
+]
+
+function PieTooltip({ active, payload }: { active?: boolean; payload?: { payload: { name: string; value: number; pct: number; pnl: number; pnlPct: number; color: string } }[] }) {
+  if (!active || !payload?.length) return null
+  const d = payload[0].payload
+  const isUp = d.pnl >= 0
+  return (
+    <div className="rounded-xl border border-white/10 bg-[#1e293b] shadow-2xl p-3.5 text-sm min-w-[180px] space-y-2">
+      <div className="flex items-center gap-2">
+        <span className="h-2.5 w-2.5 rounded-full shrink-0" style={{ background: d.color }} />
+        <p className="font-bold text-white">{d.name}</p>
+      </div>
+      <div className="space-y-1 text-xs">
+        <div className="flex justify-between gap-4">
+          <span className="text-slate-400">Value</span>
+          <span className="font-semibold text-white tabular-nums">{formatCurrency(d.value)}</span>
+        </div>
+        <div className="flex justify-between gap-4">
+          <span className="text-slate-400">Weight</span>
+          <span className="font-semibold text-white tabular-nums">{d.pct.toFixed(1)}%</span>
+        </div>
+        <div className="flex justify-between gap-4 border-t border-white/10 pt-1">
+          <span className="text-slate-400">P&L</span>
+          <span className={cn("font-semibold tabular-nums", isUp ? "text-emerald-400" : "text-red-400")}>
+            {isUp ? "+" : ""}{formatCurrency(d.pnl)} ({isUp ? "+" : ""}{d.pnlPct.toFixed(1)}%)
+          </span>
+        </div>
+      </div>
+    </div>
+  )
+}
+
+function HoldingsPieChart({ data, totalValue }: { data: { name: string; value: number; cost: number; pnl: number; pnlPct: number }[]; totalValue: number }) {
+  const [activeIndex, setActiveIndex] = useState<number | null>(null)
+
+  const pieData = [...data]
+    .filter((d) => d.value > 0)
+    .sort((a, b) => b.value - a.value)
+    .map((d, i) => ({
+      ...d,
+      color: PIE_COLORS[i % PIE_COLORS.length],
+      pct: totalValue > 0 ? (d.value / totalValue) * 100 : 0,
+    }))
+
+  const active = activeIndex !== null ? pieData[activeIndex] : null
+
+  return (
+    <Card>
+      <CardHeader>
+        <CardTitle className="text-base">Portfolio Allocation</CardTitle>
+      </CardHeader>
+      <CardContent>
+        <div className="flex flex-col lg:flex-row gap-8 items-center">
+
+          {/* Donut */}
+          <div className="relative shrink-0" style={{ width: 260, height: 260 }}>
+            <ResponsiveContainer width="100%" height="100%">
+              <PieChart>
+                <Pie
+                  data={pieData}
+                  cx="50%"
+                  cy="50%"
+                  innerRadius={78}
+                  outerRadius={118}
+                  dataKey="value"
+                  paddingAngle={2}
+                  startAngle={90}
+                  endAngle={-270}
+                  onMouseEnter={(_, i) => setActiveIndex(i)}
+                  onMouseLeave={() => setActiveIndex(null)}
+                  strokeWidth={0}
+                >
+                  {pieData.map((entry, i) => (
+                    <Cell
+                      key={i}
+                      fill={entry.color}
+                      opacity={activeIndex === null || activeIndex === i ? 1 : 0.25}
+                      style={{ transition: "opacity 150ms", cursor: "pointer" }}
+                    />
+                  ))}
+                </Pie>
+                <Tooltip content={<PieTooltip />} />
+              </PieChart>
+            </ResponsiveContainer>
+
+            {/* Center label */}
+            <div className="absolute inset-0 flex flex-col items-center justify-center pointer-events-none select-none">
+              {active ? (
+                <>
+                  <span className="inline-block h-2 w-2 rounded-full mb-1.5" style={{ background: active.color }} />
+                  <p className="text-xs font-semibold">{active.name}</p>
+                  <p className="text-lg font-bold tabular-nums leading-tight">{active.pct.toFixed(1)}%</p>
+                  <p className="text-[10px] text-muted-foreground tabular-nums">{formatCurrency(active.value)}</p>
+                </>
+              ) : (
+                <>
+                  <p className="text-[10px] text-muted-foreground uppercase tracking-wide">Portfolio</p>
+                  <p className="text-lg font-bold tabular-nums leading-tight">{formatCurrency(totalValue)}</p>
+                  <p className="text-[10px] text-muted-foreground">{pieData.length} holdings</p>
+                </>
+              )}
+            </div>
+          </div>
+
+          {/* Legend */}
+          <div className="flex-1 w-full min-w-0 space-y-0.5">
+            {pieData.map((d, i) => (
+              <div
+                key={i}
+                className={cn(
+                  "flex items-center gap-2.5 rounded-lg px-3 py-2 cursor-default transition-colors",
+                  activeIndex === i ? "bg-muted" : "hover:bg-muted/40"
+                )}
+                onMouseEnter={() => setActiveIndex(i)}
+                onMouseLeave={() => setActiveIndex(null)}
+              >
+                {/* Color swatch + bar */}
+                <div className="flex flex-col gap-1 shrink-0">
+                  <span className="h-2.5 w-2.5 rounded-full" style={{ background: d.color }} />
+                </div>
+
+                <span className="font-semibold text-sm w-16 shrink-0">{d.name}</span>
+
+                {/* Weight bar */}
+                <div className="flex-1 h-1.5 rounded-full bg-muted overflow-hidden min-w-0">
+                  <div
+                    className="h-full rounded-full transition-all duration-500"
+                    style={{ width: `${d.pct}%`, background: d.color, opacity: 0.8 }}
+                  />
+                </div>
+
+                <span className="text-xs tabular-nums text-muted-foreground w-10 text-right shrink-0">
+                  {d.pct.toFixed(1)}%
+                </span>
+                <span className="text-xs tabular-nums font-medium w-24 text-right shrink-0">
+                  {formatCurrency(d.value)}
+                </span>
+                <span className={cn(
+                  "text-xs tabular-nums w-16 text-right shrink-0",
+                  d.pnl >= 0 ? "text-emerald-500" : "text-red-500"
+                )}>
+                  {d.pnl >= 0 ? "+" : ""}{d.pnlPct.toFixed(1)}%
+                </span>
+              </div>
+            ))}
+          </div>
+        </div>
+      </CardContent>
+    </Card>
   )
 }
 
@@ -142,6 +299,8 @@ export default function StockOverviewPage() {
           </ResponsiveContainer>
         </CardContent>
       </Card>
+
+      <HoldingsPieChart data={chartData} totalValue={totalValue} />
 
       <Card>
         <CardHeader>

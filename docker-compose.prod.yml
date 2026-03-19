@@ -1,0 +1,7 @@
+services:
+  app:
+    build:
+      target: prod
+    environment:
+      NODE_ENV: production
+    command: sh -c "npx prisma migrate deploy && node server.js"

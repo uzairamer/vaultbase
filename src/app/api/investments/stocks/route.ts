@@ -53,87 +53,95 @@ export async function POST(req: Request) {
   const session = await auth()
   if (!session?.user?.id) return NextResponse.json({ error: "Unauthorized" }, { status: 401 })
 
-  const body = await req.json()
+  try {
+    const body = await req.json()
 
-  if (body.holdingId) {
-    const parsed = tradeSchema.safeParse(body)
+    if (body.holdingId) {
+      const parsed = tradeSchema.safeParse(body)
+      if (!parsed.success) return NextResponse.json({ error: parsed.error.flatten() }, { status: 400 })
+
+      const holding = await prisma.stockHolding.findFirst({
+        where: { id: parsed.data.holdingId, userId: session.user.id },
+      })
+      if (!holding) return NextResponse.json({ error: "Holding not found" }, { status: 404 })
+
+      const trade = await prisma.stockTrade.create({ data: parsed.data })
+
+      // Recalculate average price and quantity
+      const allTrades = await prisma.stockTrade.findMany({ where: { holdingId: parsed.data.holdingId } })
+      let totalQty = 0
+      let totalCost = 0
+      for (const t of allTrades) {
+        if (t.type === "buy") {
+          totalQty += Number(t.quantity)
+          totalCost += Number(t.quantity) * Number(t.price)
+        } else {
+          totalQty -= Number(t.quantity)
+        }
+      }
+      await prisma.stockHolding.update({
+        where: { id: parsed.data.holdingId },
+        data: {
+          quantity: Math.max(0, totalQty),
+          avgBuyPrice: totalQty > 0 ? totalCost / totalQty : Number(holding.avgBuyPrice),
+        },
+      })
+
+      return NextResponse.json(trade, { status: 201 })
+    }
+
+    const parsed = holdingSchema.safeParse(body)
     if (!parsed.success) return NextResponse.json({ error: parsed.error.flatten() }, { status: 400 })
 
-    const holding = await prisma.stockHolding.findFirst({
-      where: { id: parsed.data.holdingId, userId: session.user.id },
+    const { walletId, segmentId, ...holdingData } = parsed.data
+
+    if (walletId) {
+      const wallet = await prisma.wallet.findFirst({ where: { id: walletId, userId: session.user.id } })
+      if (!wallet) return NextResponse.json({ error: "Wallet not found" }, { status: 404 })
+    }
+
+    const holding = await prisma.stockHolding.create({
+      data: { ...holdingData, userId: session.user.id },
     })
-    if (!holding) return NextResponse.json({ error: "Holding not found" }, { status: 404 })
 
-    const trade = await prisma.stockTrade.create({ data: parsed.data })
+    if (walletId) {
+      const cost = Number(holdingData.quantity) * Number(holdingData.avgBuyPrice)
+      const purchaseDate = holdingData.purchaseDate ?? new Date()
 
-    // Recalculate average price and quantity
-    const allTrades = await prisma.stockTrade.findMany({ where: { holdingId: parsed.data.holdingId } })
-    let totalQty = 0
-    let totalCost = 0
-    for (const t of allTrades) {
-      if (t.type === "buy") {
-        totalQty += Number(t.quantity)
-        totalCost += Number(t.quantity) * Number(t.price)
-      } else {
-        totalQty -= Number(t.quantity)
+      await prisma.transaction.create({
+        data: {
+          userId: session.user.id,
+          walletId,
+          type: "outflow",
+          subType: "savings_investment",
+          amount: cost,
+          description: `Bought ${holdingData.quantity} × ${holdingData.symbol} @ PKR ${holdingData.avgBuyPrice}`,
+          date: purchaseDate,
+          source: "manual",
+        },
+      })
+
+      await prisma.wallet.update({
+        where: { id: walletId },
+        data: { balance: { decrement: cost } },
+      })
+
+      if (segmentId) {
+        await prisma.walletSegment.updateMany({
+          where: { id: segmentId, walletId, userId: session.user.id },
+          data: { amount: { decrement: cost } },
+        })
       }
     }
-    await prisma.stockHolding.update({
-      where: { id: parsed.data.holdingId },
-      data: {
-        quantity: Math.max(0, totalQty),
-        avgBuyPrice: totalQty > 0 ? totalCost / totalQty : Number(holding.avgBuyPrice),
-      },
-    })
 
-    return NextResponse.json(trade, { status: 201 })
+    return NextResponse.json(holding, { status: 201 })
+  } catch (err) {
+    console.error("[POST /api/investments/stocks]", err)
+    return NextResponse.json(
+      { error: "Internal server error", detail: err instanceof Error ? err.message : String(err) },
+      { status: 500 }
+    )
   }
-
-  const parsed = holdingSchema.safeParse(body)
-  if (!parsed.success) return NextResponse.json({ error: parsed.error.flatten() }, { status: 400 })
-
-  const { walletId, segmentId, ...holdingData } = parsed.data
-
-  if (walletId) {
-    const wallet = await prisma.wallet.findFirst({ where: { id: walletId, userId: session.user.id } })
-    if (!wallet) return NextResponse.json({ error: "Wallet not found" }, { status: 404 })
-  }
-
-  const holding = await prisma.stockHolding.create({
-    data: { ...holdingData, userId: session.user.id },
-  })
-
-  if (walletId) {
-    const cost = holdingData.quantity * holdingData.avgBuyPrice
-    const purchaseDate = holdingData.purchaseDate ?? new Date()
-
-    await prisma.transaction.create({
-      data: {
-        userId: session.user.id,
-        walletId,
-        type: "outflow",
-        subType: "stock_purchase",
-        amount: cost,
-        description: `Bought ${holdingData.quantity} × ${holdingData.symbol} @ PKR ${holdingData.avgBuyPrice}`,
-        date: purchaseDate,
-        source: "manual",
-      },
-    })
-
-    await prisma.wallet.update({
-      where: { id: walletId },
-      data: { balance: { decrement: cost } },
-    })
-
-    if (segmentId) {
-      await prisma.walletSegment.updateMany({
-        where: { id: segmentId, walletId, userId: session.user.id },
-        data: { amount: { decrement: cost } },
-      })
-    }
-  }
-
-  return NextResponse.json(holding, { status: 201 })
 }
 
 export async function PUT(req: Request) {

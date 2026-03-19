@@ -1,0 +1,11 @@
+services:
+  app:
+    build:
+      target: dev
+    environment:
+      WATCHPACK_POLLING: "true"
+    volumes:
+      - .:/app
+      - /app/node_modules
+      - /app/.next
+    command: sh -c "npx prisma migrate deploy && npm run dev"

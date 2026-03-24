@@ -25,6 +25,8 @@ import {
   Settings,
   KeyRound,
   BookOpen,
+  Banknote,
+  GitBranch,
 } from "lucide-react"
 import {
   Sidebar,
@@ -96,6 +98,14 @@ const navItems: NavItem[] = [
       },
       { title: "Commodities", href: "/insights/commodities", icon: BarChart },
       { title: "Expenses", href: "/insights/expenses", icon: PieChart },
+    ],
+  },
+  {
+    title: "Incomes",
+    href: "/incomes/breakdown",
+    icon: Banknote,
+    children: [
+      { title: "Breakdown", href: "/incomes/breakdown", icon: GitBranch },
     ],
   },
   {

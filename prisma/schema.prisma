@@ -31,6 +31,8 @@ model User {
   sideInvestments SideInvestment[]
   watchlist       WatchlistItem[]
   segments        WalletSegment[]
+  incomeSources   IncomeSource[]
+  incomeBreakdown IncomeBreakdown[]
 }
 
 model Account {
@@ -321,4 +323,40 @@ model SideInvestment {
   updatedAt      DateTime  @updatedAt
 
   user User @relation(fields: [userId], references: [id], onDelete: Cascade)
+}
+
+// ─── INCOME BREAKDOWN ────────────────────────────────────────────────────────
+
+model IncomeSource {
+  id          String   @id @default(cuid())
+  userId      String
+  name        String
+  amount      Decimal  @db.Decimal(15, 2)
+  currency    String   @default("PKR")
+  color       String   @default("#6366f1")
+  frequency   String   @default("monthly") // daily, weekly, monthly, quarterly, annually
+  description String?
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+
+  user      User              @relation(fields: [userId], references: [id], onDelete: Cascade)
+  breakdown IncomeBreakdown[]
+}
+
+model IncomeBreakdown {
+  id             String   @id @default(cuid())
+  userId         String
+  incomeSourceId String
+  parentId       String?
+  name           String
+  amount         Decimal  @db.Decimal(15, 2)
+  color          String   @default("#6366f1")
+  note           String?
+  createdAt      DateTime @default(now())
+  updatedAt      DateTime @updatedAt
+
+  user         User              @relation(fields: [userId], references: [id], onDelete: Cascade)
+  incomeSource IncomeSource      @relation(fields: [incomeSourceId], references: [id], onDelete: Cascade)
+  parent       IncomeBreakdown?  @relation("BreakdownChildren", fields: [parentId], references: [id], onDelete: Cascade)
+  children     IncomeBreakdown[] @relation("BreakdownChildren")
 }

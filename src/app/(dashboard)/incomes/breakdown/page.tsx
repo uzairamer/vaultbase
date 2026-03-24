@@ -722,7 +722,7 @@ export default function IncomeBreakdownPage() {
                       ? "border-transparent ring-2 bg-muted/60"
                       : "hover:bg-muted/30 border-border/50"
                   )}
-                  style={isActive ? { ringColor: s.color } : {}}
+                  style={isActive ? { "--tw-ring-color": s.color } as React.CSSProperties : {}}
                 >
                   <div className="flex items-center gap-2 mb-1.5">
                     <span className="h-2.5 w-2.5 rounded-full shrink-0" style={{ background: s.color }} />

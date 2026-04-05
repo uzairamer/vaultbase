@@ -17,7 +17,7 @@ export async function GET() {
       prisma.receivable.findMany({ where: { userId } }),
       prisma.liability.findMany({ where: { userId } }),
       prisma.transaction.findMany({
-        where: { userId },
+        where: { userId, NOT: { source: "reconciliation" } },
         orderBy: { date: "asc" },
         include: { category: true },
       }),

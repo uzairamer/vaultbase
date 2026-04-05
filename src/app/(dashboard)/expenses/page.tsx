@@ -83,8 +83,9 @@ export default function ExpensesPage() {
     !!filterDateTo,
   ].filter(Boolean).length
 
-  const totalInflow = filtered.filter((t) => t.type === "inflow").reduce((sum, t) => sum + Number(t.amount), 0)
-  const totalOutflow = filtered.filter((t) => t.type === "outflow").reduce((sum, t) => sum + Number(t.amount), 0)
+  const cashFiltered = filtered.filter((t) => t.source !== "reconciliation")
+  const totalInflow = cashFiltered.filter((t) => t.type === "inflow").reduce((sum, t) => sum + Number(t.amount), 0)
+  const totalOutflow = cashFiltered.filter((t) => t.type === "outflow").reduce((sum, t) => sum + Number(t.amount), 0)
 
   function clearFilters() {
     setFilterType("all")
@@ -238,14 +239,14 @@ export default function ExpensesPage() {
               <CardContent className="p-3 sm:p-4">
                 <p className="text-xs text-muted-foreground">Total Inflow</p>
                 <p className="text-sm sm:text-lg font-bold text-green-600 leading-tight truncate">+{formatCurrency(totalInflow)}</p>
-                <p className="text-xs text-muted-foreground">{filtered.filter((t) => t.type === "inflow").length} transactions</p>
+                <p className="text-xs text-muted-foreground">{cashFiltered.filter((t) => t.type === "inflow").length} transactions</p>
               </CardContent>
             </Card>
             <Card className={`cursor-pointer transition-shadow ${filterType === "outflow" ? "ring-2 ring-red-500" : "hover:ring-1 hover:ring-red-500/50"}`} onClick={() => setFilterType(filterType === "outflow" ? "all" : "outflow")}>
               <CardContent className="p-3 sm:p-4">
                 <p className="text-xs text-muted-foreground">Total Outflow</p>
                 <p className="text-sm sm:text-lg font-bold text-red-600 leading-tight truncate">-{formatCurrency(totalOutflow)}</p>
-                <p className="text-xs text-muted-foreground">{filtered.filter((t) => t.type === "outflow").length} transactions</p>
+                <p className="text-xs text-muted-foreground">{cashFiltered.filter((t) => t.type === "outflow").length} transactions</p>
               </CardContent>
             </Card>
           </div>

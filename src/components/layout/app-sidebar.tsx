@@ -27,6 +27,7 @@ import {
   BookOpen,
   Banknote,
   GitBranch,
+  Scale,
 } from "lucide-react"
 import {
   Sidebar,
@@ -89,6 +90,7 @@ const navItems: NavItem[] = [
         icon: LineChart,
         children: [
           { title: "Company Profile", href: "/insights/stocks/company-profile", icon: BookOpen },
+          { title: "Fair Value", href: "/insights/stocks/fair-value", icon: Scale },
           { title: "Heatmap", href: "/insights/stocks/heatmap", icon: BarChart },
           { title: "Historical", href: "/insights/stocks/historical", icon: History },
           { title: "Overview", href: "/insights/stocks", icon: BarChart3 },

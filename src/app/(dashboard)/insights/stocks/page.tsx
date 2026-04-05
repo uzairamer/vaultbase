@@ -1,7 +1,7 @@
 "use client"
 
 import { useEffect, useState } from "react"
-import { useInsightsData, useLivePrices } from "@/modules/insights/hooks"
+import { useInsightsData, useLivePrices, usePortfolioReturn, ReturnPeriod, ReturnPoint, ReturnEvent } from "@/modules/insights/hooks"
 import { PageHeader } from "@/components/shared/page-header"
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card"
 import { formatCurrency, formatPercent, cn } from "@/lib/utils"
@@ -9,6 +9,7 @@ import {
   BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip,
   ResponsiveContainer, Cell, Legend,
   PieChart, Pie,
+  AreaChart, Area,
 } from "recharts"
 
 function BarChartTooltip({ active, payload }: { active?: boolean; payload?: { payload: Record<string, number> }[] }) {
@@ -202,6 +203,262 @@ function HoldingsPieChart({ data, totalValue }: { data: { name: string; value: n
   )
 }
 
+// ─── Return Over Time ─────────────────────────────────────────────────────────
+
+const PERIODS: { value: ReturnPeriod; label: string }[] = [
+  { value: "ytd", label: "YTD" },
+  { value: "1y",  label: "1Y"  },
+  { value: "3y",  label: "3Y"  },
+  { value: "max", label: "Max" },
+]
+
+type ChartPoint = ReturnPoint & { event?: ReturnEvent }
+
+function ReturnTooltip({ active, payload }: {
+  active?: boolean
+  payload?: { payload: ChartPoint }[]
+}) {
+  if (!active || !payload?.length) return null
+  const d = payload[0].payload
+  return (
+    <div className="rounded-xl border border-white/10 bg-[#0f172a] shadow-2xl p-3.5 text-xs min-w-[210px] space-y-2">
+      <p className="text-slate-400 font-medium">{d.date}</p>
+      <div className="flex justify-between gap-4">
+        <span className="text-slate-400">Portfolio Value</span>
+        <span className="font-bold text-white tabular-nums">{formatCurrency(d.value)}</span>
+      </div>
+      {d.event && (
+        <div className="border-t border-white/10 pt-2 space-y-1.5">
+          <p className="text-slate-500 font-semibold uppercase tracking-wide text-[10px]">Trades on this day</p>
+          {d.event.trades.map((t, i) => {
+            const isBuy = t.type === "buy"
+            return (
+              <div key={i} className="flex items-center justify-between gap-3">
+                <span className={cn("font-bold flex items-center gap-1", isBuy ? "text-emerald-400" : "text-red-400")}>
+                  <span>{isBuy ? "▲" : "▼"}</span>
+                  <span>{isBuy ? "Buy" : "Sell"}</span>
+                  <span className="text-white">{t.symbol}</span>
+                </span>
+                <span className="text-slate-300 tabular-nums">
+                  {t.quantity.toLocaleString()} @ {formatCurrency(t.price)}
+                </span>
+              </div>
+            )
+          })}
+        </div>
+      )}
+    </div>
+  )
+}
+
+// Custom dot renderer — only draws a visible marker for event points
+function EventDot(props: {
+  cx?: number; cy?: number
+  payload?: ChartPoint
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  [k: string]: any
+}) {
+  const { cx, cy, payload } = props
+  if (!payload?.event || cx == null || cy == null) return <g />
+
+  const hasBuy  = payload.event.trades.some((t) => t.type === "buy")
+  const hasSell = payload.event.trades.some((t) => t.type === "sell")
+  const color   = hasBuy && hasSell ? "#f59e0b" : hasBuy ? "#22c55e" : "#ef4444"
+  const arrow   = hasBuy && hasSell ? "↕" : hasBuy ? "▲" : "▼"
+
+  // Build a short label: "BUY MEBL" or "SELL MEBL,LUCK"
+  const symbols = [...new Set(payload.event.trades.map((t) => t.symbol))].join(",")
+  const action  = hasBuy && hasSell ? "TRADE" : hasBuy ? "BUY" : "SELL"
+  const label   = `${action} ${symbols}`
+
+  return (
+    <g>
+      {/* Outer glow ring */}
+      <circle cx={cx} cy={cy} r={11} fill={color} fillOpacity={0.2} />
+      {/* Main dot */}
+      <circle cx={cx} cy={cy} r={7} fill={color} stroke="white" strokeWidth={1.5} />
+      {/* Arrow inside */}
+      <text x={cx} y={cy + 4} textAnchor="middle" fill="white" fontSize={8} fontWeight="bold">
+        {arrow}
+      </text>
+      {/* Label above */}
+      <text x={cx} y={cy - 16} textAnchor="middle" fill={color} fontSize={9} fontWeight="bold">
+        {label}
+      </text>
+    </g>
+  )
+}
+
+function ReturnOverTime() {
+  const [period, setPeriod] = useState<ReturnPeriod>("1y")
+  const { data, isLoading } = usePortfolioReturn(period)
+
+  const points: ReturnPoint[] = (data as { points: ReturnPoint[]; events: ReturnEvent[] } | undefined)?.points ?? []
+  const events: ReturnEvent[] = (data as { points: ReturnPoint[]; events: ReturnEvent[] } | undefined)?.events ?? []
+
+  const lastValue     = points[points.length - 1]?.value ?? 0
+  const totalInvested = events
+    .flatMap((e) => e.trades)
+    .filter((t) => t.type === "buy")
+    .reduce((s, t) => s + t.quantity * t.price, 0)
+  const absReturn = lastValue - totalInvested
+  const pctReturn = totalInvested > 0 ? (absReturn / totalInvested) * 100 : 0
+  const isUp      = absReturn >= 0
+
+  // For each event find its nearest chart point, then build a lookup by point timestamp
+  const pointEventMap = new Map<number, ReturnEvent>()
+  for (const event of events) {
+    let nearest: ReturnPoint | null = null
+    let nearestDiff = Infinity
+    for (const p of points) {
+      const diff = Math.abs(p.timestamp - event.timestamp)
+      if (diff < nearestDiff) { nearestDiff = diff; nearest = p }
+    }
+    if (!nearest || nearestDiff > 86400 * 3) continue
+    // Multiple events on the same nearest point → merge trades
+    const existing = pointEventMap.get(nearest.timestamp)
+    if (existing) existing.trades.push(...event.trades)
+    else pointEventMap.set(nearest.timestamp, { ...event, trades: [...event.trades] })
+  }
+
+  const chartData: ChartPoint[] = points.map((p) => {
+    const event = pointEventMap.get(p.timestamp)
+    return event ? { ...p, event } : p
+  })
+
+  const hasEvents = chartData.some((p) => p.event)
+
+  return (
+    <Card>
+      <CardHeader className="flex-row items-start justify-between gap-4 flex-wrap pb-3">
+        <div className="space-y-0.5">
+          <CardTitle className="text-base">Return Over Time</CardTitle>
+          <p className="text-xs text-muted-foreground">Portfolio value based on holdings × closing price</p>
+        </div>
+        <div className="flex gap-1 shrink-0">
+          {PERIODS.map((p) => (
+            <button
+              key={p.value}
+              onClick={() => setPeriod(p.value)}
+              className={cn(
+                "px-3 py-1 rounded-md text-xs font-medium transition-colors",
+                period === p.value
+                  ? "bg-primary text-primary-foreground"
+                  : "text-muted-foreground hover:text-foreground hover:bg-muted"
+              )}
+            >
+              {p.label}
+            </button>
+          ))}
+        </div>
+      </CardHeader>
+      <CardContent className="space-y-4">
+        {/* Stats row */}
+        {points.length > 0 && (
+          <div className="grid grid-cols-3 gap-3">
+            {[
+              { label: "Total Invested", value: formatCurrency(totalInvested), accent: "#6366f1" },
+              { label: "Current Value", value: formatCurrency(lastValue),   accent: "#06b6d4" },
+              {
+                label: "Period Return",
+                value: `${isUp ? "+" : ""}${pctReturn.toFixed(2)}%`,
+                sub:   `${isUp ? "+" : ""}${formatCurrency(Math.abs(absReturn))}`,
+                accent: isUp ? "#22c55e" : "#ef4444",
+              },
+            ].map(({ label, value, sub, accent }) => (
+              <div key={label} className="rounded-xl border p-3 space-y-0.5">
+                <div className="flex items-center gap-1.5">
+                  <span className="h-1.5 w-1.5 rounded-full shrink-0" style={{ background: accent }} />
+                  <p className="text-[10px] uppercase tracking-wide text-muted-foreground">{label}</p>
+                </div>
+                <p className="text-sm font-bold tabular-nums" style={{ color: accent }}>{value}</p>
+                {sub && <p className="text-[10px] text-muted-foreground tabular-nums">{sub}</p>}
+              </div>
+            ))}
+          </div>
+        )}
+
+        {/* Chart */}
+        {isLoading ? (
+          <div className="h-64 rounded-xl bg-muted/40 animate-pulse" />
+        ) : points.length === 0 ? (
+          <div className="h-64 flex items-center justify-center text-sm text-muted-foreground">
+            No portfolio data for this period
+          </div>
+        ) : (
+          <>
+            <ResponsiveContainer width="100%" height={320}>
+              <AreaChart data={chartData} margin={{ top: 30, right: 8, left: 0, bottom: 0 }}>
+                <defs>
+                  <linearGradient id="portfolioGradient" x1="0" y1="0" x2="0" y2="1">
+                    <stop offset="0%"   stopColor={isUp ? "#6366f1" : "#ef4444"} stopOpacity={0.35} />
+                    <stop offset="100%" stopColor={isUp ? "#6366f1" : "#ef4444"} stopOpacity={0.02} />
+                  </linearGradient>
+                </defs>
+                <CartesianGrid strokeDasharray="3 3" stroke="rgba(148,163,184,0.1)" />
+                <XAxis
+                  dataKey="timestamp"
+                  type="number"
+                  domain={["dataMin", "dataMax"]}
+                  scale="time"
+                  tickFormatter={(ts: number) =>
+                    new Date(ts * 1000).toLocaleDateString("en-PK", { month: "short", day: "numeric" })
+                  }
+                  tick={{ fontSize: 11, fill: "#94a3b8" }}
+                  tickLine={false}
+                  axisLine={false}
+                  minTickGap={60}
+                />
+                <YAxis
+                  tickFormatter={(v: number) => {
+                    if (v >= 1_000_000) return `${(v / 1_000_000).toFixed(1)}M`
+                    if (v >= 1_000) return `${(v / 1_000).toFixed(0)}K`
+                    return String(v)
+                  }}
+                  tick={{ fontSize: 11, fill: "#94a3b8" }}
+                  tickLine={false}
+                  axisLine={false}
+                  width={52}
+                />
+                <Tooltip
+                  content={<ReturnTooltip />}
+                  cursor={{ stroke: "rgba(148,163,184,0.3)", strokeWidth: 1 }}
+                />
+                <Area
+                  type="monotone"
+                  dataKey="value"
+                  stroke={isUp ? "#6366f1" : "#ef4444"}
+                  strokeWidth={2}
+                  fill="url(#portfolioGradient)"
+                  dot={(dotProps: { cx?: number; cy?: number; payload?: ChartPoint; index?: number }) => (
+                    <EventDot key={`dot-${dotProps.index}`} {...dotProps} />
+                  )}
+                  activeDot={{ r: 4, fill: isUp ? "#6366f1" : "#ef4444", stroke: "white", strokeWidth: 2 }}
+                />
+              </AreaChart>
+            </ResponsiveContainer>
+
+            {/* Event legend */}
+            {hasEvents && (
+              <div className="flex items-center gap-4 text-[11px] text-muted-foreground px-1">
+                <div className="flex items-center gap-1.5">
+                  <span className="h-2.5 w-2.5 rounded-full bg-emerald-500" />Buy
+                </div>
+                <div className="flex items-center gap-1.5">
+                  <span className="h-2.5 w-2.5 rounded-full bg-red-500" />Sell
+                </div>
+                <div className="flex items-center gap-1.5">
+                  <span className="h-2.5 w-2.5 rounded-full bg-amber-500" />Mixed
+                </div>
+              </div>
+            )}
+          </>
+        )}
+      </CardContent>
+    </Card>
+  )
+}
+
 export default function StockOverviewPage() {
   const [mounted, setMounted] = useState(false)
   useEffect(() => setMounted(true), [])
@@ -276,6 +533,8 @@ export default function StockOverviewPage() {
         title="Overview"
         description={`Total P&L: ${formatCurrency(totalPnl)} (${formatPercent(totalCost > 0 ? (totalPnl / totalCost) * 100 : 0)})`}
       />
+
+      <ReturnOverTime />
 
       <Card>
         <CardHeader>

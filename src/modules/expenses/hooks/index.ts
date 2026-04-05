@@ -45,6 +45,19 @@ export function useDeleteWallet() {
   })
 }
 
+export function useReconcileWallet() {
+  const qc = useQueryClient()
+  return useMutation({
+    mutationFn: (data: { walletId: string; actualBalance: number; note?: string }) =>
+      mutator("/api/expenses/wallets/reconcile", { method: "POST", body: JSON.stringify(data) }),
+    onSuccess: () => {
+      qc.invalidateQueries({ queryKey: ["wallets"] })
+      qc.invalidateQueries({ queryKey: ["transactions"] })
+      qc.invalidateQueries({ queryKey: ["insights"] })
+    },
+  })
+}
+
 export function useTransactions(params?: Record<string, string>) {
   const query = params ? "?" + new URLSearchParams(params).toString() : ""
   return useQuery({ queryKey: ["transactions", params], queryFn: () => fetcher(`/api/expenses/transactions${query}`) })

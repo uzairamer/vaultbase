@@ -149,13 +149,15 @@ export async function GET(req: Request) {
   const liabilityTotal = liabilityItems.reduce((sum, l) => sum + l.remaining, 0)
 
   // ── Cash Flow (quarter window) ────────────────────────────────────────────
+  // Exclude reconciliation adjustments — they correct the ledger balance, not real cash flow
+  const cashTx = transactions.filter((t) => t.source !== "reconciliation")
 
-  const inflow = transactions.filter((t) => t.type === "inflow").reduce((sum, t) => sum + Number(t.amount), 0)
-  const outflow = transactions.filter((t) => t.type === "outflow").reduce((sum, t) => sum + Number(t.amount), 0)
+  const inflow = cashTx.filter((t) => t.type === "inflow").reduce((sum, t) => sum + Number(t.amount), 0)
+  const outflow = cashTx.filter((t) => t.type === "outflow").reduce((sum, t) => sum + Number(t.amount), 0)
 
   // Aggregate by category name (or subType if no category)
   const catMap = new Map<string, { name: string; type: string; total: number }>()
-  for (const t of transactions) {
+  for (const t of cashTx) {
     const key = t.category?.name ?? t.subType ?? "Uncategorized"
     const type = t.type
     if (!catMap.has(key)) catMap.set(key, { name: key, type, total: 0 })

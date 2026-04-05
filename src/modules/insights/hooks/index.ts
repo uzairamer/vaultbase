@@ -22,6 +22,30 @@ export function useInsightsData() {
   return useQuery({ queryKey: ["insights"], queryFn: () => fetcher("/api/insights") })
 }
 
+// ─── Portfolio Return ────────────────────────────────────────────────────────
+
+export type ReturnPeriod = "ytd" | "1y" | "3y" | "max"
+
+export interface ReturnPoint {
+  timestamp: number
+  date: string
+  value: number
+}
+
+export interface ReturnEvent {
+  timestamp: number
+  date: string
+  trades: { symbol: string; type: string; quantity: number; price: number }[]
+}
+
+export function usePortfolioReturn(period: ReturnPeriod) {
+  return useQuery({
+    queryKey: ["portfolio-return", period],
+    queryFn: () => fetcher(`/api/insights/portfolio-return?period=${period}`),
+    staleTime: 5 * 60 * 1000,
+  })
+}
+
 // ─── Stock History ──────────────────────────────────────────────────────────
 
 export interface StockHistoryPoint {

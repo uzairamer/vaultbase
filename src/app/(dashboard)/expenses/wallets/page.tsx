@@ -1,7 +1,7 @@
 "use client"
 
 import { useState } from "react"
-import { useWallets, useCreateWallet, useDeleteWallet, useCreateTransaction, useTransfer, useCategories, useReceivables, useLiabilities } from "@/modules/expenses/hooks"
+import { useWallets, useCreateWallet, useDeleteWallet, useCreateTransaction, useTransfer, useCategories, useReceivables, useLiabilities, useReconcileWallet } from "@/modules/expenses/hooks"
 import { WalletSegmentsDialog } from "@/modules/expenses/components/wallet-segments-dialog"
 import type { Segment } from "@/modules/expenses/components/wallet-segments-dialog"
 import { PageHeader } from "@/components/shared/page-header"
@@ -12,7 +12,7 @@ import { Input } from "@/components/ui/input"
 import { Label } from "@/components/ui/label"
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select"
 import { EmptyState } from "@/components/shared/empty-state"
-import { Plus, Wallet, Trash2, Building, Banknote, Smartphone, ArrowDownLeft, ArrowUpRight, ArrowLeftRight, LayoutGrid } from "lucide-react"
+import { Plus, Wallet, Trash2, Building, Banknote, Smartphone, ArrowDownLeft, ArrowUpRight, ArrowLeftRight, LayoutGrid, Scale } from "lucide-react"
 import { formatCurrency } from "@/lib/utils"
 import { Badge } from "@/components/ui/badge"
 import { WALLET_TYPES, INFLOW_SUBTYPES, OUTFLOW_SUBTYPES } from "@/lib/constants"
@@ -34,7 +34,13 @@ export default function WalletsPage() {
   const deleteWallet = useDeleteWallet()
   const createTx = useCreateTransaction()
   const transfer = useTransfer()
+  const reconcile = useReconcileWallet()
   const [open, setOpen] = useState(false)
+
+  // Reconcile dialog state
+  const [reconcileWalletId, setReconcileWalletId] = useState<string | null>(null)
+  const [actualBalance, setActualBalance] = useState("")
+  const [reconcileNote, setReconcileNote] = useState("")
 
   // Transaction dialog state
   const [txWalletId, setTxWalletId] = useState<string | null>(null)
@@ -124,6 +130,32 @@ export default function WalletsPage() {
       },
       {
         onSuccess: () => { setTransferFromId(null); toast.success("Transfer completed") },
+        onError: (err) => toast.error(err.message),
+      }
+    )
+  }
+
+  function closeReconcileDialog() {
+    setReconcileWalletId(null)
+    setActualBalance("")
+    setReconcileNote("")
+  }
+
+  function handleReconcile(e: React.FormEvent) {
+    e.preventDefault()
+    if (!reconcileWalletId) return
+    reconcile.mutate(
+      { walletId: reconcileWalletId, actualBalance: Number(actualBalance), note: reconcileNote || undefined },
+      {
+        onSuccess: (res) => {
+          closeReconcileDialog()
+          if (res.diff === 0) {
+            toast.success("Wallet is already balanced — no adjustment needed")
+          } else {
+            const sign = res.diff > 0 ? "+" : ""
+            toast.success(`Reconciled: ${sign}${formatCurrency(res.diff)} adjustment recorded`)
+          }
+        },
         onError: (err) => toast.error(err.message),
       }
     )
@@ -376,6 +408,83 @@ export default function WalletsPage() {
         </DialogContent>
       </Dialog>
 
+      {/* Reconcile Dialog */}
+      {(() => {
+        const rw = (wallets as Record<string, unknown>[]).find((w) => w.id === reconcileWalletId)
+        const stored = rw ? Number(rw.balance) : 0
+        const entered = Number(actualBalance)
+        const diff = actualBalance !== "" && !isNaN(entered) ? entered - stored : null
+        return (
+          <Dialog open={!!reconcileWalletId} onOpenChange={(isOpen) => { if (!isOpen) closeReconcileDialog() }}>
+            <DialogContent className="sm:max-w-sm">
+              <DialogHeader>
+                <DialogTitle className="flex items-center gap-2">
+                  <Scale className="h-4 w-4" />
+                  Reconcile — {rw?.name as string}
+                </DialogTitle>
+              </DialogHeader>
+              <form onSubmit={handleReconcile} className="space-y-4">
+                {/* Current balance display */}
+                <div className="rounded-lg bg-muted/50 px-4 py-3 flex items-center justify-between text-sm">
+                  <span className="text-muted-foreground">Current balance</span>
+                  <span className="font-semibold tabular-nums">{formatCurrency(stored)}</span>
+                </div>
+
+                <div className="space-y-2">
+                  <Label>Actual balance <span className="text-xs text-muted-foreground">(from bank / cash count)</span></Label>
+                  <Input
+                    type="number"
+                    step="0.01"
+                    placeholder="0.00"
+                    value={actualBalance}
+                    onChange={(e) => setActualBalance(e.target.value)}
+                    required
+                    autoFocus
+                  />
+                </div>
+
+                {/* Live diff preview */}
+                {diff !== null && (
+                  <div className={`rounded-lg px-4 py-3 flex items-center justify-between text-sm ${
+                    Math.abs(diff) < 0.01
+                      ? "bg-muted/50"
+                      : diff > 0
+                      ? "bg-green-500/10 border border-green-500/20"
+                      : "bg-red-500/10 border border-red-500/20"
+                  }`}>
+                    <span className="text-muted-foreground">
+                      {Math.abs(diff) < 0.01 ? "No adjustment needed" : diff > 0 ? "Inflow adjustment" : "Outflow adjustment"}
+                    </span>
+                    <span className={`font-bold tabular-nums ${
+                      Math.abs(diff) < 0.01 ? "" : diff > 0 ? "text-green-600 dark:text-green-400" : "text-red-600 dark:text-red-400"
+                    }`}>
+                      {diff > 0 ? "+" : ""}{formatCurrency(diff)}
+                    </span>
+                  </div>
+                )}
+
+                <div className="space-y-2">
+                  <Label>Note <span className="text-xs text-muted-foreground">(optional)</span></Label>
+                  <Input
+                    placeholder="e.g. Monthly bank statement check"
+                    value={reconcileNote}
+                    onChange={(e) => setReconcileNote(e.target.value)}
+                  />
+                </div>
+
+                <Button
+                  type="submit"
+                  className="w-full"
+                  disabled={reconcile.isPending || actualBalance === ""}
+                >
+                  {reconcile.isPending ? "Reconciling..." : "Confirm Reconciliation"}
+                </Button>
+              </form>
+            </DialogContent>
+          </Dialog>
+        )
+      })()}
+
       {/* Segments Dialog */}
       {segmentsWalletId && (() => {
         const w = (wallets as Record<string, unknown>[]).find((w) => w.id === segmentsWalletId)
@@ -497,15 +606,29 @@ export default function WalletsPage() {
                       <ArrowLeftRight className="h-3.5 w-3.5 mr-1" /> Transfer
                     </Button>
                   </div>
-                  <Button
-                    size="sm"
-                    variant="ghost"
-                    className="w-full text-xs text-muted-foreground h-7"
-                    onClick={() => setSegmentsWalletId(wallet.id as string)}
-                  >
-                    <LayoutGrid className="h-3 w-3 mr-1.5" />
-                    Manage Segments
-                  </Button>
+                  <div className="flex gap-2">
+                    <Button
+                      size="sm"
+                      variant="ghost"
+                      className="flex-1 text-xs text-muted-foreground h-7"
+                      onClick={() => setSegmentsWalletId(wallet.id as string)}
+                    >
+                      <LayoutGrid className="h-3 w-3 mr-1.5" />
+                      Segments
+                    </Button>
+                    <Button
+                      size="sm"
+                      variant="ghost"
+                      className="flex-1 text-xs text-amber-600 dark:text-amber-400 h-7 hover:bg-amber-50 dark:hover:bg-amber-950/30"
+                      onClick={() => {
+                        setReconcileWalletId(wallet.id as string)
+                        setActualBalance(String(Number(wallet.balance)))
+                      }}
+                    >
+                      <Scale className="h-3 w-3 mr-1.5" />
+                      Reconcile
+                    </Button>
+                  </div>
                 </CardContent>
               </Card>
             )

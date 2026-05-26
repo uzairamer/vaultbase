@@ -307,14 +307,14 @@ function TreeNode({
 
         {/* Name + note */}
         <div className="flex-1 min-w-0">
-          <span className="text-sm font-medium truncate">{node.name}</span>
-          {node.note && <span className="ml-2 text-xs text-muted-foreground truncate">{node.note}</span>}
+          <p className="text-sm font-medium truncate">{node.name}</p>
+          {node.note && <p className="text-xs text-muted-foreground truncate">{node.note}</p>}
         </div>
 
         {/* Amount + pct */}
-        <div className="text-right shrink-0">
-          <p className="text-sm font-semibold tabular-nums">{formatCurrency(effectiveAmount)}</p>
-          <p className="text-[10px] text-muted-foreground tabular-nums">{pctOfIncome.toFixed(1)}% of income</p>
+        <div className="text-right shrink-0 pl-2">
+          <p className="text-sm font-semibold tabular-nums whitespace-nowrap">{formatCurrency(effectiveAmount)}</p>
+          <p className="text-[10px] text-muted-foreground tabular-nums whitespace-nowrap">{pctOfIncome.toFixed(1)}% of income</p>
         </div>
 
         {/* Actions — absolutely positioned overlay on hover */}

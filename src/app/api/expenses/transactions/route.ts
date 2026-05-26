@@ -29,7 +29,10 @@ export async function GET(req: Request) {
   const subType = searchParams.get("subType")
   const categoryId = searchParams.get("categoryId")
 
+  const includeArchived = searchParams.get("includeArchived") === "true"
+
   const where: Record<string, unknown> = { userId: session.user.id }
+  if (!includeArchived) where.archivedAt = null
   if (walletId) where.walletId = walletId
   if (type) where.type = type
   if (subType) where.subType = subType

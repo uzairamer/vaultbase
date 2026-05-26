@@ -39,7 +39,7 @@ export async function GET(req: Request) {
   }
 
   const properties = await prisma.property.findMany({
-    where: { userId: session.user.id },
+    where: { userId: session.user.id, archivedAt: null },
     orderBy: { createdAt: "desc" },
     include: { installments: true },
   })

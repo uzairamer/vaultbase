@@ -8,6 +8,8 @@ const createSchema = z.object({
   name: z.string().min(1),
   amount: z.coerce.number().min(0),
   color: z.string().default("#6366f1"),
+  resetSchedule: z.enum(["none", "weekly", "monthly", "quarterly"]).default("none"),
+  resetAmount: z.coerce.number().min(0).optional().nullable(),
 })
 
 const updateSchema = z.object({
@@ -15,6 +17,8 @@ const updateSchema = z.object({
   name: z.string().min(1).optional(),
   amount: z.coerce.number().min(0).optional(),
   color: z.string().optional(),
+  resetSchedule: z.enum(["none", "weekly", "monthly", "quarterly"]).optional(),
+  resetAmount: z.coerce.number().min(0).optional().nullable(),
 })
 
 export async function POST(req: Request) {

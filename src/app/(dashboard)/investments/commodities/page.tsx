@@ -2,6 +2,7 @@
 
 import { useState } from "react"
 import { useCommodities, useCreateCommodity, useDeleteCommodity } from "@/modules/investments/hooks"
+import { InvestmentArchiveDialog } from "@/modules/investments/components/archive-dialog"
 import { PageHeader } from "@/components/shared/page-header"
 import { Button } from "@/components/ui/button"
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card"
@@ -10,7 +11,7 @@ import { Input } from "@/components/ui/input"
 import { Label } from "@/components/ui/label"
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select"
 import { EmptyState } from "@/components/shared/empty-state"
-import { Plus, Gem, Trash2 } from "lucide-react"
+import { Plus, Gem, Trash2, Archive } from "lucide-react"
 import { Badge } from "@/components/ui/badge"
 import { formatCurrency, formatPercent } from "@/lib/utils"
 import { COMMODITY_TYPES, COMMODITY_UNITS } from "@/lib/constants"
@@ -22,6 +23,7 @@ export default function CommoditiesPage() {
   const createCommodity = useCreateCommodity()
   const deleteCommodity = useDeleteCommodity()
   const [open, setOpen] = useState(false)
+  const [archiveOpen, setArchiveOpen] = useState(false)
 
   const totalValue = (commodities as Record<string, unknown>[]).reduce((sum: number, c: Record<string, unknown>) => {
     return sum + Number(c.quantity) * Number(c.currentPrice ?? c.avgBuyPrice)
@@ -50,6 +52,11 @@ export default function CommoditiesPage() {
   return (
     <div>
       <PageHeader title="Commodities" description={`Total value: ${formatCurrency(totalValue)}`}>
+        {(commodities as Record<string, unknown>[]).length > 0 && (
+          <Button variant="outline" className="text-orange-600 border-orange-200 hover:bg-orange-50 dark:border-orange-900 dark:hover:bg-orange-950" onClick={() => setArchiveOpen(true)}>
+            <Archive className="mr-2 h-4 w-4" /> Archive All
+          </Button>
+        )}
         <Dialog open={open} onOpenChange={setOpen}>
           <DialogTrigger asChild>
             <Button><Plus className="mr-2 h-4 w-4" /> Add Commodity</Button>
@@ -141,6 +148,12 @@ export default function CommoditiesPage() {
           })}
         </div>
       )}
+      <InvestmentArchiveDialog
+        open={archiveOpen}
+        onOpenChange={setArchiveOpen}
+        type="commodities"
+        itemCount={(commodities as Record<string, unknown>[]).length}
+      />
     </div>
   )
 }

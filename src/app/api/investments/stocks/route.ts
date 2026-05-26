@@ -41,7 +41,7 @@ export async function GET(req: Request) {
   }
 
   const holdings = await prisma.stockHolding.findMany({
-    where: { userId: session.user.id },
+    where: { userId: session.user.id, archivedAt: null },
     orderBy: { createdAt: "desc" },
     include: { trades: { orderBy: { date: "desc" } } },
   })

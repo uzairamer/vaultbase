@@ -30,7 +30,7 @@ export async function POST(req: Request) {
 
   // Fetch all lots for this symbol (oldest first — FIFO), including their existing sell trades
   const holdings = await prisma.stockHolding.findMany({
-    where: { userId, symbol },
+    where: { userId, symbol, archivedAt: null },
     include: { trades: { where: { type: "sell" } } },
     orderBy: { createdAt: "asc" },
   })

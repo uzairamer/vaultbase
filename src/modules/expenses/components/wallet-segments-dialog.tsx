@@ -5,10 +5,18 @@ import { Dialog, DialogContent, DialogHeader, DialogTitle } from "@/components/u
 import { Button } from "@/components/ui/button"
 import { Input } from "@/components/ui/input"
 import { Label } from "@/components/ui/label"
+import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select"
 import { Trash2, Pencil, Check, X, Plus } from "lucide-react"
 import { formatCurrency } from "@/lib/utils"
 import { useCreateSegment, useUpdateSegment, useDeleteSegment } from "../hooks"
 import { toast } from "sonner"
+
+const RESET_SCHEDULE_OPTIONS = [
+  { value: "none", label: "No reset" },
+  { value: "weekly", label: "Weekly (every Monday)" },
+  { value: "monthly", label: "Monthly (1st of month)" },
+  { value: "quarterly", label: "Quarterly (1st of quarter)" },
+]
 
 const PRESET_COLORS = [
   "#6366f1", // indigo
@@ -27,6 +35,8 @@ export interface Segment {
   amount: number
   color: string
   isDefault: boolean
+  resetSchedule?: string
+  resetAmount?: number | null
 }
 
 interface Props {
@@ -47,12 +57,16 @@ export function WalletSegmentsDialog({ open, onOpenChange, walletId, walletName,
   const [newName, setNewName] = useState("")
   const [newAmount, setNewAmount] = useState("")
   const [newColor, setNewColor] = useState(PRESET_COLORS[1])
+  const [newResetSchedule, setNewResetSchedule] = useState("monthly")
+  const [newResetAmount, setNewResetAmount] = useState("")
 
   // Edit state
   const [editingId, setEditingId] = useState<string | null>(null)
   const [editName, setEditName] = useState("")
   const [editAmount, setEditAmount] = useState("")
   const [editColor, setEditColor] = useState("")
+  const [editResetSchedule, setEditResetSchedule] = useState("none")
+  const [editResetAmount, setEditResetAmount] = useState("")
 
   const totalAllocated = segments.reduce((sum, s) => sum + s.amount, 0)
   const unallocated = walletBalance - totalAllocated
@@ -62,6 +76,8 @@ export function WalletSegmentsDialog({ open, onOpenChange, walletId, walletName,
     setEditName(seg.name)
     setEditAmount(String(seg.amount))
     setEditColor(seg.color)
+    setEditResetSchedule(seg.resetSchedule ?? "none")
+    setEditResetAmount(seg.resetAmount != null ? String(seg.resetAmount) : "")
   }
 
   function cancelEdit() {
@@ -74,8 +90,9 @@ export function WalletSegmentsDialog({ open, onOpenChange, walletId, walletName,
       toast.error("Enter a valid name and amount")
       return
     }
+    const resetAmount = editResetSchedule !== "none" && editResetAmount !== "" ? Number(editResetAmount) : null
     updateSegment.mutate(
-      { id, name: editName.trim(), amount, color: editColor },
+      { id, name: editName.trim(), amount, color: editColor, resetSchedule: editResetSchedule, resetAmount },
       {
         onSuccess: () => { setEditingId(null); toast.success("Segment updated") },
         onError: (err) => toast.error(err.message),
@@ -97,13 +114,16 @@ export function WalletSegmentsDialog({ open, onOpenChange, walletId, walletName,
       toast.error("Enter a valid name and amount")
       return
     }
+    const resetAmount = newResetSchedule !== "none" && newResetAmount !== "" ? Number(newResetAmount) : null
     createSegment.mutate(
-      { walletId, name: newName.trim(), amount, color: newColor },
+      { walletId, name: newName.trim(), amount, color: newColor, resetSchedule: newResetSchedule, resetAmount },
       {
         onSuccess: () => {
           setNewName("")
           setNewAmount("")
           setNewColor(PRESET_COLORS[1])
+          setNewResetSchedule("none")
+          setNewResetAmount("")
           toast.success("Segment added")
         },
         onError: (err) => toast.error(err.message),
@@ -119,7 +139,7 @@ export function WalletSegmentsDialog({ open, onOpenChange, walletId, walletName,
 
   return (
     <Dialog open={open} onOpenChange={onOpenChange}>
-      <DialogContent className="sm:max-w-lg">
+      <DialogContent className="sm:max-w-2xl">
         <DialogHeader>
           <DialogTitle>Segments — {walletName}</DialogTitle>
         </DialogHeader>
@@ -168,43 +188,81 @@ export function WalletSegmentsDialog({ open, onOpenChange, walletId, walletName,
         <div className="space-y-1.5 max-h-56 overflow-y-auto pr-1">
           {segments.map((seg) =>
             editingId === seg.id ? (
-              <div key={seg.id} className="flex items-center gap-2 rounded-lg border bg-muted/30 p-2">
-                {/* Color picker */}
-                <div className="flex gap-1 shrink-0">
-                  {PRESET_COLORS.map((c) => (
-                    <button
-                      key={c}
-                      type="button"
-                      onClick={() => setEditColor(c)}
-                      className={`h-4 w-4 rounded-full border-2 transition-transform ${editColor === c ? "border-foreground scale-110" : "border-transparent"}`}
-                      style={{ backgroundColor: c }}
-                    />
-                  ))}
+              <div key={seg.id} className="space-y-2 rounded-lg border bg-muted/30 p-3">
+                {/* Row 1: color + name + amount + actions */}
+                <div className="flex items-center gap-2">
+                  <div className="flex gap-1 shrink-0">
+                    {PRESET_COLORS.map((c) => (
+                      <button
+                        key={c}
+                        type="button"
+                        onClick={() => setEditColor(c)}
+                        className={`h-4 w-4 rounded-full border-2 transition-transform ${editColor === c ? "border-foreground scale-110" : "border-transparent"}`}
+                        style={{ backgroundColor: c }}
+                      />
+                    ))}
+                  </div>
+                  <Input
+                    value={editName}
+                    onChange={(e) => setEditName(e.target.value)}
+                    className="h-7 text-sm flex-1 min-w-0"
+                  />
+                  <Input
+                    type="number"
+                    value={editAmount}
+                    onChange={(e) => setEditAmount(e.target.value)}
+                    className="h-7 text-sm w-24"
+                    step="0.01"
+                    min="0"
+                  />
+                  <button onClick={() => saveEdit(seg.id)} className="text-green-500 hover:text-green-400 shrink-0" title="Save">
+                    <Check className="h-4 w-4" />
+                  </button>
+                  <button onClick={cancelEdit} className="text-muted-foreground hover:text-foreground shrink-0" title="Cancel">
+                    <X className="h-4 w-4" />
+                  </button>
                 </div>
-                <Input
-                  value={editName}
-                  onChange={(e) => setEditName(e.target.value)}
-                  className="h-7 text-sm flex-1 min-w-0"
-                />
-                <Input
-                  type="number"
-                  value={editAmount}
-                  onChange={(e) => setEditAmount(e.target.value)}
-                  className="h-7 text-sm w-28"
-                  step="0.01"
-                  min="0"
-                />
-                <button onClick={() => saveEdit(seg.id)} className="text-green-500 hover:text-green-400 shrink-0" title="Save">
-                  <Check className="h-4 w-4" />
-                </button>
-                <button onClick={cancelEdit} className="text-muted-foreground hover:text-foreground shrink-0" title="Cancel">
-                  <X className="h-4 w-4" />
-                </button>
+                {/* Row 2: reset schedule */}
+                <div className="space-y-2">
+                  <Label className="text-xs font-medium text-muted-foreground">Reset Schedule</Label>
+                  <Select value={editResetSchedule} onValueChange={setEditResetSchedule}>
+                    <SelectTrigger className="h-9 text-sm w-full">
+                      <SelectValue />
+                    </SelectTrigger>
+                    <SelectContent>
+                      {RESET_SCHEDULE_OPTIONS.map((o) => (
+                        <SelectItem key={o.value} value={o.value}>{o.label}</SelectItem>
+                      ))}
+                    </SelectContent>
+                  </Select>
+                  {editResetSchedule !== "none" && (
+                    <div className="space-y-1">
+                      <Label className="text-xs text-muted-foreground">Reset segment amount to</Label>
+                      <Input
+                        type="number"
+                        value={editResetAmount}
+                        onChange={(e) => setEditResetAmount(e.target.value)}
+                        placeholder="Leave blank to reset to 0"
+                        className="h-9 text-sm w-full"
+                        step="0.01"
+                        min="0"
+                      />
+                    </div>
+                  )}
+                </div>
               </div>
             ) : (
               <div key={seg.id} className="flex items-center gap-3 rounded-lg border px-3 py-2 group">
                 <span className="h-3 w-3 rounded-full shrink-0" style={{ backgroundColor: seg.color }} />
-                <span className="flex-1 text-sm font-medium truncate">{seg.name}</span>
+                <div className="flex-1 min-w-0">
+                  <span className="text-sm font-medium truncate block">{seg.name}</span>
+                  {seg.resetSchedule && seg.resetSchedule !== "none" && (
+                    <span className="text-xs text-muted-foreground">
+                      Resets {RESET_SCHEDULE_OPTIONS.find(o => o.value === seg.resetSchedule)?.label?.toLowerCase().replace("no reset", "")}
+                      {seg.resetAmount != null ? ` → ${formatCurrency(seg.resetAmount)}` : " → 0"}
+                    </span>
+                  )}
+                </div>
                 <span className="text-sm tabular-nums text-muted-foreground">{formatCurrency(seg.amount)}</span>
                 <span className="text-xs text-muted-foreground w-10 text-right tabular-nums">
                   {walletBalance > 0 ? `${Math.round((seg.amount / walletBalance) * 100)}%` : "—"}
@@ -262,6 +320,33 @@ export function WalletSegmentsDialog({ open, onOpenChange, walletId, walletName,
             <Button type="submit" size="sm" disabled={createSegment.isPending}>
               <Plus className="h-4 w-4" />
             </Button>
+          </div>
+          <div className="space-y-2 rounded-lg border border-dashed border-muted-foreground/30 p-3">
+            <Label className="text-xs font-medium text-muted-foreground">Reset Schedule</Label>
+            <Select value={newResetSchedule} onValueChange={setNewResetSchedule}>
+              <SelectTrigger className="h-9 text-sm w-full">
+                <SelectValue />
+              </SelectTrigger>
+              <SelectContent>
+                {RESET_SCHEDULE_OPTIONS.map((o) => (
+                  <SelectItem key={o.value} value={o.value}>{o.label}</SelectItem>
+                ))}
+              </SelectContent>
+            </Select>
+            {newResetSchedule !== "none" && (
+              <div className="space-y-1">
+                <Label className="text-xs text-muted-foreground">Reset segment amount to</Label>
+                <Input
+                  type="number"
+                  value={newResetAmount}
+                  onChange={(e) => setNewResetAmount(e.target.value)}
+                  placeholder="Leave blank to reset to 0"
+                  className="h-9 text-sm w-full"
+                  step="0.01"
+                  min="0"
+                />
+              </div>
+            )}
           </div>
         </form>
       </DialogContent>

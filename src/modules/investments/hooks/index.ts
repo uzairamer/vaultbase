@@ -128,6 +128,22 @@ export function useDeleteCommodity() {
   })
 }
 
+// Archive (stocks / commodities / realestate)
+export function useArchiveInvestments() {
+  const qc = useQueryClient()
+  return useMutation({
+    mutationFn: (type: "stocks" | "commodities" | "realestate") =>
+      mutator("/api/investments/archive", { method: "POST", body: JSON.stringify({ type }) }),
+    onSuccess: (_data, type) => {
+      if (type === "stocks") qc.invalidateQueries({ queryKey: ["stocks"] })
+      if (type === "commodities") qc.invalidateQueries({ queryKey: ["commodities"] })
+      if (type === "realestate") qc.invalidateQueries({ queryKey: ["properties"] })
+      qc.invalidateQueries({ queryKey: ["insights"] })
+      qc.invalidateQueries({ queryKey: ["financial-report"] })
+    },
+  })
+}
+
 // Side Investments
 export function useSideInvestments() {
   return useQuery({ queryKey: ["side-investments"], queryFn: () => fetcher("/api/investments/other") })

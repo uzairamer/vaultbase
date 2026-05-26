@@ -1,7 +1,7 @@
 "use client"
 
-import { useState } from "react"
-import { useWallets, useCreateWallet, useDeleteWallet, useCreateTransaction, useTransfer, useCategories, useReceivables, useLiabilities, useReconcileWallet } from "@/modules/expenses/hooks"
+import { useState, useEffect } from "react"
+import { useWallets, useCreateWallet, useDeleteWallet, useCreateTransaction, useTransfer, useCategories, useReceivables, useLiabilities, useReconcileWallet, useCheckSegmentResets, useArchiveWallet } from "@/modules/expenses/hooks"
 import { WalletSegmentsDialog } from "@/modules/expenses/components/wallet-segments-dialog"
 import type { Segment } from "@/modules/expenses/components/wallet-segments-dialog"
 import { PageHeader } from "@/components/shared/page-header"
@@ -12,7 +12,7 @@ import { Input } from "@/components/ui/input"
 import { Label } from "@/components/ui/label"
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select"
 import { EmptyState } from "@/components/shared/empty-state"
-import { Plus, Wallet, Trash2, Building, Banknote, Smartphone, ArrowDownLeft, ArrowUpRight, ArrowLeftRight, LayoutGrid, Scale, Wifi } from "lucide-react"
+import { Plus, Wallet, Trash2, Building, Banknote, Smartphone, ArrowDownLeft, ArrowUpRight, ArrowLeftRight, LayoutGrid, Scale, Wifi, Archive } from "lucide-react"
 import { formatCurrency, cn } from "@/lib/utils"
 import { Badge } from "@/components/ui/badge"
 import { WALLET_TYPES, INFLOW_SUBTYPES, OUTFLOW_SUBTYPES } from "@/lib/constants"
@@ -81,6 +81,12 @@ export default function WalletsPage() {
   const createTx = useCreateTransaction()
   const transfer = useTransfer()
   const reconcile = useReconcileWallet()
+  const archive = useArchiveWallet()
+  const checkResets = useCheckSegmentResets()
+
+  // Check and apply any due segment resets on page load
+  useEffect(() => { checkResets.mutate() }, []) // eslint-disable-line react-hooks/exhaustive-deps
+
   const [open, setOpen] = useState(false)
 
   // Reconcile dialog state
@@ -92,6 +98,7 @@ export default function WalletsPage() {
   const [txWalletId, setTxWalletId] = useState<string | null>(null)
   const [txType, setTxType] = useState<"inflow" | "outflow" | null>(null)
   const [txSubType, setTxSubType] = useState("")
+  const [txSegmentId, setTxSegmentId] = useState("")
 
   // Transfer dialog state
   const [transferFromId, setTransferFromId] = useState<string | null>(null)
@@ -102,6 +109,10 @@ export default function WalletsPage() {
   // Delete confirmation state
   const [deleteWalletId, setDeleteWalletId] = useState<string | null>(null)
   const [deleteConfirmInput, setDeleteConfirmInput] = useState("")
+
+  // Archive confirmation state
+  const [archiveWalletId, setArchiveWalletId] = useState<string | null>(null)
+  const [archiveConfirmInput, setArchiveConfirmInput] = useState("")
 
   const totalBalance = (wallets as Record<string, unknown>[]).reduce(
     (sum: number, w: Record<string, unknown>) => sum + Number(w.balance),
@@ -139,6 +150,7 @@ export default function WalletsPage() {
       amount: Number(fd.get("amount")),
       description: fd.get("description") as string,
       date: fd.get("date") as string,
+      segmentId: txSegmentId || undefined,
     }
     if (txSubType === "lending") payload.personName = fd.get("personName") as string
     if (txSubType === "receivable_collection") payload.receivableId = fd.get("receivableId") as string
@@ -165,6 +177,7 @@ export default function WalletsPage() {
     setTxWalletId(null)
     setTxType(null)
     setTxSubType("")
+    setTxSegmentId("")
   }
 
   function handleTransferSubmit(e: React.FormEvent<HTMLFormElement>) {
@@ -332,6 +345,30 @@ export default function WalletsPage() {
                 <Label>Amount</Label>
                 <Input name="amount" type="number" step="0.01" min="0" required />
               </div>
+
+              {/* Segment picker — shown when wallet has segments */}
+              {(() => {
+                const segs = ((txWallet?.segments ?? []) as Record<string, unknown>[]).filter(
+                  (s) => !(s.isDefault as boolean) || (txWallet?.segments as Record<string, unknown>[]).length === 1
+                )
+                const allSegs = (txWallet?.segments ?? []) as Record<string, unknown>[]
+                if (allSegs.length === 0) return null
+                return (
+                  <div className="space-y-2">
+                    <Label>Segment <span className="text-xs text-muted-foreground">(optional — deduct from a specific segment)</span></Label>
+                    <Select value={txSegmentId} onValueChange={setTxSegmentId}>
+                      <SelectTrigger><SelectValue placeholder="No segment (affects whole wallet)" /></SelectTrigger>
+                      <SelectContent>
+                        {allSegs.map((s) => (
+                          <SelectItem key={s.id as string} value={s.id as string}>
+                            {s.name as string} — {formatCurrency(Number(s.amount))}
+                          </SelectItem>
+                        ))}
+                      </SelectContent>
+                    </Select>
+                  </div>
+                )
+              })()}
 
               <div className="space-y-2">
                 <Label>Description</Label>
@@ -591,6 +628,66 @@ export default function WalletsPage() {
         )
       })()}
 
+      {/* Archive Confirmation Dialog */}
+      {(() => {
+        const aw = (wallets as Record<string, unknown>[]).find((w) => w.id === archiveWalletId)
+        const txCount = Number(aw?._count && (aw._count as Record<string, number>).transactions) || 0
+        const balance = Number(aw?.balance ?? 0)
+        const confirmed = archiveConfirmInput === "archive me"
+        return (
+          <Dialog open={!!archiveWalletId} onOpenChange={(isOpen) => { if (!isOpen) { setArchiveWalletId(null); setArchiveConfirmInput("") } }}>
+            <DialogContent className="sm:max-w-md">
+              <DialogHeader>
+                <DialogTitle className="flex items-center gap-2 text-orange-600 dark:text-orange-400">
+                  <Archive className="h-4 w-4" />
+                  Archive & reset wallet
+                </DialogTitle>
+              </DialogHeader>
+              <div className="space-y-4">
+                <div className="rounded-lg border border-orange-500/20 bg-orange-500/5 px-4 py-3 text-sm">
+                  <p className="font-medium text-foreground">{aw?.name as string}</p>
+                  <p className="text-xs mt-1 text-muted-foreground">
+                    This will archive <span className="font-medium text-foreground">{txCount}</span> transaction{txCount !== 1 ? "s" : ""}, reset the balance from <span className="font-medium text-foreground">{formatCurrency(balance)}</span> to <span className="font-medium text-foreground">{formatCurrency(0)}</span>, and zero all segment amounts. Segment configurations are preserved.
+                  </p>
+                  <p className="text-xs mt-2 text-muted-foreground">
+                    Archived data is hidden from analytics but preserved in the database for audit.
+                  </p>
+                </div>
+                <div className="space-y-2">
+                  <Label className="text-sm">
+                    Type <span className="font-mono font-semibold text-foreground">archive me</span> to confirm
+                  </Label>
+                  <Input
+                    placeholder="archive me"
+                    value={archiveConfirmInput}
+                    onChange={(e) => setArchiveConfirmInput(e.target.value)}
+                    autoFocus
+                    className={confirmed ? "border-orange-500 focus-visible:ring-orange-500/30" : ""}
+                  />
+                </div>
+                <Button
+                  className="w-full bg-orange-600 hover:bg-orange-700 text-white"
+                  disabled={!confirmed || archive.isPending}
+                  onClick={() => {
+                    if (!archiveWalletId) return
+                    archive.mutate(archiveWalletId, {
+                      onSuccess: (res: { archived: number }) => {
+                        setArchiveWalletId(null)
+                        setArchiveConfirmInput("")
+                        toast.success(`Archived ${res.archived} transaction${res.archived !== 1 ? "s" : ""}. Wallet reset.`)
+                      },
+                      onError: (err) => toast.error(err.message),
+                    })
+                  }}
+                >
+                  {archive.isPending ? "Archiving..." : "Archive & reset"}
+                </Button>
+              </div>
+            </DialogContent>
+          </Dialog>
+        )
+      })()}
+
       {/* Segments Dialog */}
       {segmentsWalletId && (() => {
         const w = (wallets as Record<string, unknown>[]).find((w) => w.id === segmentsWalletId)
@@ -768,6 +865,15 @@ export default function WalletsPage() {
                     >
                       <Scale className="h-3 w-3 mr-1.5" />
                       Reconcile
+                    </Button>
+                    <Button
+                      size="sm"
+                      variant="ghost"
+                      className="flex-1 text-xs text-orange-600 dark:text-orange-400 h-7 hover:bg-orange-50 dark:hover:bg-orange-950/30"
+                      onClick={() => { setArchiveWalletId(wallet.id as string); setArchiveConfirmInput("") }}
+                    >
+                      <Archive className="h-3 w-3 mr-1.5" />
+                      Archive
                     </Button>
                   </div>
                 </div>

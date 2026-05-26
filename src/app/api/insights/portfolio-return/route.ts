@@ -36,7 +36,7 @@ export async function GET(req: NextRequest) {
   const now = Math.floor(Date.now() / 1000)
 
   const holdings = await prisma.stockHolding.findMany({
-    where: { userId: session.user.id },
+    where: { userId: session.user.id, archivedAt: null },
     include: { trades: { orderBy: { date: "asc" } } },
   })
 

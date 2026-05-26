@@ -26,14 +26,14 @@ export async function GET(req: Request) {
   const [wallets, stocks, commodities, properties, sideInvestments, receivables, liabilities, transactions] =
     await Promise.all([
       prisma.wallet.findMany({ where: { userId }, include: { segments: true } }),
-      prisma.stockHolding.findMany({ where: { userId }, include: { trades: { where: { type: "sell" } } } }),
-      prisma.commodityHolding.findMany({ where: { userId } }),
-      prisma.property.findMany({ where: { userId }, include: { installments: true } }),
+      prisma.stockHolding.findMany({ where: { userId, archivedAt: null }, include: { trades: { where: { type: "sell" } } } }),
+      prisma.commodityHolding.findMany({ where: { userId, archivedAt: null } }),
+      prisma.property.findMany({ where: { userId, archivedAt: null }, include: { installments: true } }),
       prisma.sideInvestment.findMany({ where: { userId } }),
       prisma.receivable.findMany({ where: { userId, status: { not: "settled" } } }),
       prisma.liability.findMany({ where: { userId, status: { not: "settled" } } }),
       prisma.transaction.findMany({
-        where: { userId, date: { gte: from, lte: to } },
+        where: { userId, archivedAt: null, date: { gte: from, lte: to } },
         include: { category: true },
         orderBy: { date: "asc" },
       }),

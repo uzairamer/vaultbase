@@ -33,6 +33,8 @@ export default function ExpensesPage() {
   const [open, setOpen] = useState(false)
   const [txType, setTxType] = useState<"inflow" | "outflow" | null>(null)
   const [subType, setSubType] = useState("")
+  const [selectedWalletId, setSelectedWalletId] = useState("")
+  const [selectedSegmentId, setSelectedSegmentId] = useState("")
 
   // Filter state
   const [filterType, setFilterType] = useState<"all" | "inflow" | "outflow">("all")
@@ -108,6 +110,7 @@ export default function ExpensesPage() {
       amount: Number(fd.get("amount")),
       description: fd.get("description") as string,
       date: fd.get("date") as string,
+      segmentId: selectedSegmentId || undefined,
     }
     if (subType === "lending") payload.personName = fd.get("personName") as string
     if (subType === "receivable_collection") payload.receivableId = fd.get("receivableId") as string
@@ -131,7 +134,7 @@ export default function ExpensesPage() {
 
   function resetDialog(isOpen: boolean) {
     setOpen(isOpen)
-    if (!isOpen) { setTxType(null); setSubType("") }
+    if (!isOpen) { setTxType(null); setSubType(""); setSelectedWalletId(""); setSelectedSegmentId("") }
   }
 
   if (isLoading) return <div className="p-6">Loading...</div>
@@ -181,12 +184,35 @@ export default function ExpensesPage() {
                 </div>
                 <div className="grid grid-cols-2 gap-4">
                   <div className="space-y-2"><Label>Wallet</Label>
-                    <Select name="walletId" required><SelectTrigger><SelectValue placeholder="Select wallet" /></SelectTrigger>
-                      <SelectContent>{(wallets as Record<string, string>[]).map((w) => (<SelectItem key={w.id} value={w.id}>{w.name}</SelectItem>))}</SelectContent>
+                    <Select name="walletId" required value={selectedWalletId} onValueChange={(v) => { setSelectedWalletId(v); setSelectedSegmentId("") }}>
+                      <SelectTrigger><SelectValue placeholder="Select wallet" /></SelectTrigger>
+                      <SelectContent>{(wallets as Record<string, unknown>[]).map((w) => (<SelectItem key={w.id as string} value={w.id as string}>{w.name as string}</SelectItem>))}</SelectContent>
                     </Select>
                   </div>
                   <div className="space-y-2"><Label>Amount</Label><Input name="amount" type="number" step="0.01" min="0" required /></div>
                 </div>
+
+                {/* Segment picker — shown when selected wallet has segments */}
+                {(() => {
+                  const selWallet = (wallets as Record<string, unknown>[]).find((w) => w.id === selectedWalletId)
+                  const segs = ((selWallet?.segments ?? []) as Record<string, unknown>[])
+                  if (!selWallet || segs.length === 0) return null
+                  return (
+                    <div className="space-y-2">
+                      <Label>Segment <span className="text-xs text-muted-foreground">(optional — deduct from a specific segment)</span></Label>
+                      <Select value={selectedSegmentId} onValueChange={setSelectedSegmentId}>
+                        <SelectTrigger><SelectValue placeholder="No segment (affects whole wallet)" /></SelectTrigger>
+                        <SelectContent>
+                          {segs.map((s) => (
+                            <SelectItem key={s.id as string} value={s.id as string}>
+                              {s.name as string} — {formatCurrency(Number(s.amount))}
+                            </SelectItem>
+                          ))}
+                        </SelectContent>
+                      </Select>
+                    </div>
+                  )
+                })()}
                 <div className="space-y-2"><Label>Description</Label><Input name="description" placeholder="What was this for?" /></div>
                 {subType === "lending" && (<div className="space-y-2"><Label>Person Name <span className="text-xs text-muted-foreground">(a receivable will be created)</span></Label><Input name="personName" placeholder="Who are you lending to?" required /></div>)}
                 {subType === "receivable_collection" && (receivables as Record<string, unknown>[]).filter((r) => r.status !== "settled").length > 0 && (

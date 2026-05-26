@@ -2,6 +2,7 @@
 
 import { useState, useMemo } from "react"
 import { useStocks, useCreateStock, useDeleteStock, useSellStock } from "@/modules/investments/hooks"
+import { InvestmentArchiveDialog } from "@/modules/investments/components/archive-dialog"
 import { useWallets } from "@/modules/expenses/hooks"
 import { useLivePrices } from "@/modules/insights/hooks"
 import { PageHeader } from "@/components/shared/page-header"
@@ -14,7 +15,7 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@
 import { EmptyState } from "@/components/shared/empty-state"
 import { DataTable } from "@/components/shared/data-table"
 import { Badge } from "@/components/ui/badge"
-import { Plus, BarChart3, Trash2, TrendingDown } from "lucide-react"
+import { Plus, BarChart3, Trash2, TrendingDown, Archive } from "lucide-react"
 import { formatCurrency, formatPercent } from "@/lib/utils"
 import { type ColumnDef } from "@tanstack/react-table"
 import { format } from "date-fns"
@@ -46,6 +47,7 @@ export default function StocksPage() {
 
   const [addOpen, setAddOpen] = useState(false)
   const [sellOpen, setSellOpen] = useState(false)
+  const [archiveOpen, setArchiveOpen] = useState(false)
   const [selectedSymbol, setSelectedSymbol] = useState("")
   const [selectedWalletId, setSelectedWalletId] = useState("")
   const [addWalletId, setAddWalletId] = useState("")
@@ -327,6 +329,11 @@ export default function StocksPage() {
     <div className="space-y-6">
       <PageHeader title="Stocks" description={`Portfolio value: ${formatCurrency(totalValue)}`}>
         <div className="flex gap-2">
+          {(stocks as Record<string, unknown>[]).length > 0 && (
+            <Button variant="outline" className="text-orange-600 border-orange-200 hover:bg-orange-50 dark:border-orange-900 dark:hover:bg-orange-950" onClick={() => setArchiveOpen(true)}>
+              <Archive className="mr-2 h-4 w-4" /> Archive All
+            </Button>
+          )}
           {heldSymbols.length > 0 && (
             <Dialog open={sellOpen} onOpenChange={(o) => { setSellOpen(o); if (!o) { setSelectedSymbol(""); setSelectedWalletId("") } }}>
               <DialogTrigger asChild>
@@ -497,6 +504,12 @@ export default function StocksPage() {
           </CardContent>
         </Card>
       )}
+      <InvestmentArchiveDialog
+        open={archiveOpen}
+        onOpenChange={setArchiveOpen}
+        type="stocks"
+        itemCount={(stocks as Record<string, unknown>[]).length}
+      />
     </div>
   )
 }

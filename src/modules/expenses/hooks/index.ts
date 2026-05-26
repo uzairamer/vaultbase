@@ -58,6 +58,20 @@ export function useReconcileWallet() {
   })
 }
 
+export function useArchiveWallet() {
+  const qc = useQueryClient()
+  return useMutation({
+    mutationFn: (walletId: string) =>
+      mutator("/api/expenses/wallets/archive", { method: "POST", body: JSON.stringify({ walletId }) }),
+    onSuccess: () => {
+      qc.invalidateQueries({ queryKey: ["wallets"] })
+      qc.invalidateQueries({ queryKey: ["transactions"] })
+      qc.invalidateQueries({ queryKey: ["insights"] })
+      qc.invalidateQueries({ queryKey: ["financial-report"] })
+    },
+  })
+}
+
 export function useTransactions(params?: Record<string, string>) {
   const query = params ? "?" + new URLSearchParams(params).toString() : ""
   return useQuery({ queryKey: ["transactions", params], queryFn: () => fetcher(`/api/expenses/transactions${query}`) })
@@ -175,6 +189,16 @@ export function useDeleteSegment() {
     mutationFn: (id: string) =>
       mutator(`/api/expenses/segments?id=${id}`, { method: "DELETE" }),
     onSuccess: () => qc.invalidateQueries({ queryKey: ["wallets"] }),
+  })
+}
+
+export function useCheckSegmentResets() {
+  const qc = useQueryClient()
+  return useMutation({
+    mutationFn: () => mutator("/api/expenses/segments/reset", { method: "POST" }),
+    onSuccess: (data: { reset: number }) => {
+      if (data.reset > 0) qc.invalidateQueries({ queryKey: ["wallets"] })
+    },
   })
 }
 

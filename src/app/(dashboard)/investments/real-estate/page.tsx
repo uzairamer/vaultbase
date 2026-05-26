@@ -2,6 +2,7 @@
 
 import { useState } from "react"
 import { useProperties, useCreateProperty, useDeleteProperty } from "@/modules/investments/hooks"
+import { InvestmentArchiveDialog } from "@/modules/investments/components/archive-dialog"
 import { PageHeader } from "@/components/shared/page-header"
 import { Button } from "@/components/ui/button"
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card"
@@ -10,7 +11,7 @@ import { Input } from "@/components/ui/input"
 import { Label } from "@/components/ui/label"
 import { Textarea } from "@/components/ui/textarea"
 import { EmptyState } from "@/components/shared/empty-state"
-import { Plus, Building2, Trash2, MapPin } from "lucide-react"
+import { Plus, Building2, Trash2, MapPin, Archive } from "lucide-react"
 import { Badge } from "@/components/ui/badge"
 import { formatCurrency } from "@/lib/utils"
 import { format } from "date-fns"
@@ -22,6 +23,7 @@ export default function RealEstatePage() {
   const createProperty = useCreateProperty()
   const deleteProperty = useDeleteProperty()
   const [open, setOpen] = useState(false)
+  const [archiveOpen, setArchiveOpen] = useState(false)
 
   const totalValue = (properties as Record<string, unknown>[]).reduce(
     (sum: number, p: Record<string, unknown>) => sum + Number(p.currentValue ?? p.totalPrice),
@@ -53,6 +55,11 @@ export default function RealEstatePage() {
   return (
     <div>
       <PageHeader title="Real Estate" description={`Total value: ${formatCurrency(totalValue)}`}>
+        {(properties as Record<string, unknown>[]).length > 0 && (
+          <Button variant="outline" className="text-orange-600 border-orange-200 hover:bg-orange-50 dark:border-orange-900 dark:hover:bg-orange-950" onClick={() => setArchiveOpen(true)}>
+            <Archive className="mr-2 h-4 w-4" /> Archive All
+          </Button>
+        )}
         <Dialog open={open} onOpenChange={setOpen}>
           <DialogTrigger asChild>
             <Button><Plus className="mr-2 h-4 w-4" /> Add Property</Button>
@@ -143,6 +150,12 @@ export default function RealEstatePage() {
           })}
         </div>
       )}
+      <InvestmentArchiveDialog
+        open={archiveOpen}
+        onOpenChange={setArchiveOpen}
+        type="realestate"
+        itemCount={(properties as Record<string, unknown>[]).length}
+      />
     </div>
   )
 }

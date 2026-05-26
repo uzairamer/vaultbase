@@ -90,15 +90,18 @@ model Wallet {
 }
 
 model WalletSegment {
-  id        String   @id @default(cuid())
-  userId    String
-  walletId  String
-  name      String
-  amount    Decimal  @db.Decimal(15, 2) @default(0)
-  color     String   @default("#6366f1")
-  isDefault Boolean  @default(false)
-  createdAt DateTime @default(now())
-  updatedAt DateTime @updatedAt
+  id              String    @id @default(cuid())
+  userId          String
+  walletId        String
+  name            String
+  amount          Decimal   @db.Decimal(15, 2) @default(0)
+  color           String    @default("#6366f1")
+  isDefault       Boolean   @default(false)
+  resetSchedule   String    @default("none") // none | weekly | monthly | quarterly
+  resetAmount     Decimal?  @db.Decimal(15, 2) // amount to reset to (null = reset to 0)
+  lastResetAt     DateTime?
+  createdAt       DateTime  @default(now())
+  updatedAt       DateTime  @updatedAt
 
   user   User   @relation(fields: [userId], references: [id], onDelete: Cascade)
   wallet Wallet @relation(fields: [walletId], references: [id], onDelete: Cascade)
@@ -115,6 +118,7 @@ model Transaction {
   description String?
   date        DateTime
   source      String   @default("manual") // manual, csv_import
+  archivedAt  DateTime?
   createdAt   DateTime @default(now())
 
   user     User      @relation(fields: [userId], references: [id], onDelete: Cascade)
@@ -211,6 +215,7 @@ model Property {
   status       String    @default("active") // active, sold, completed
   purchaseDate DateTime
   notes        String?
+  archivedAt   DateTime?
   createdAt    DateTime  @default(now())
   updatedAt    DateTime  @updatedAt
 
@@ -246,17 +251,18 @@ model WatchlistItem {
 // ─── INVESTMENTS — STOCKS ────────────────────────────────────────────────────
 
 model StockHolding {
-  id           String   @id @default(cuid())
+  id           String    @id @default(cuid())
   userId       String
   symbol       String
   name         String
-  quantity     Decimal  @db.Decimal(15, 4)
-  avgBuyPrice  Decimal  @db.Decimal(15, 4)
-  currentPrice Decimal? @db.Decimal(15, 4)
-  purchaseDate DateTime @default(now())
-  currency     String   @default("PKR")
-  createdAt    DateTime @default(now())
-  updatedAt    DateTime @updatedAt
+  quantity     Decimal   @db.Decimal(15, 4)
+  avgBuyPrice  Decimal   @db.Decimal(15, 4)
+  currentPrice Decimal?  @db.Decimal(15, 4)
+  purchaseDate DateTime  @default(now())
+  currency     String    @default("PKR")
+  archivedAt   DateTime?
+  createdAt    DateTime  @default(now())
+  updatedAt    DateTime  @updatedAt
 
   user   User         @relation(fields: [userId], references: [id], onDelete: Cascade)
   trades StockTrade[]
@@ -278,16 +284,17 @@ model StockTrade {
 // ─── INVESTMENTS — COMMODITIES ───────────────────────────────────────────────
 
 model CommodityHolding {
-  id           String   @id @default(cuid())
+  id           String    @id @default(cuid())
   userId       String
-  type         String   // gold, silver, oil, etc.
-  unit         String   // oz, gram, tola, barrel
-  quantity     Decimal  @db.Decimal(15, 4)
-  avgBuyPrice  Decimal  @db.Decimal(15, 4)
-  currentPrice Decimal? @db.Decimal(15, 4)
-  currency     String   @default("PKR")
-  createdAt    DateTime @default(now())
-  updatedAt    DateTime @updatedAt
+  type         String    // gold, silver, oil, etc.
+  unit         String    // oz, gram, tola, barrel
+  quantity     Decimal   @db.Decimal(15, 4)
+  avgBuyPrice  Decimal   @db.Decimal(15, 4)
+  currentPrice Decimal?  @db.Decimal(15, 4)
+  currency     String    @default("PKR")
+  archivedAt   DateTime?
+  createdAt    DateTime  @default(now())
+  updatedAt    DateTime  @updatedAt
 
   user   User             @relation(fields: [userId], references: [id], onDelete: Cascade)
   trades CommodityTrade[]

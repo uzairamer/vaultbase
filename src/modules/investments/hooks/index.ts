@@ -62,6 +62,29 @@ export function useUpdateInstallment() {
   })
 }
 
+export function useSaveLedger() {
+  const qc = useQueryClient()
+  return useMutation({
+    mutationFn: (data: {
+      propertyId: string
+      rows: Array<{ type: string; amount: number; dueDate: string; status: string; paidDate?: string | null; receiptNote?: string | null }>
+    }) => mutator("/api/investments/real-estate/ledger/save", { method: "POST", body: JSON.stringify(data) }),
+    onSuccess: () => {
+      qc.invalidateQueries({ queryKey: ["properties"] })
+      qc.invalidateQueries({ queryKey: ["insights"] })
+    },
+  })
+}
+
+export function useUnlockLedger() {
+  const qc = useQueryClient()
+  return useMutation({
+    mutationFn: (propertyId: string) =>
+      mutator(`/api/investments/real-estate/ledger/save?propertyId=${propertyId}`, { method: "DELETE" }),
+    onSuccess: () => qc.invalidateQueries({ queryKey: ["properties"] }),
+  })
+}
+
 export function useRegenerateLedger() {
   const qc = useQueryClient()
   return useMutation({

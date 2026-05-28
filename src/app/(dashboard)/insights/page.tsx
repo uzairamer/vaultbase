@@ -3,7 +3,7 @@
 import { useInsightsData } from "@/modules/insights/hooks"
 import { PageHeader } from "@/components/shared/page-header"
 import { StatCard } from "@/components/shared/stat-card"
-import { cn, formatCurrency } from "@/lib/utils"
+import { cn, formatCurrency, formatCompact } from "@/lib/utils"
 import { totalStocksValue } from "@/lib/stocks"
 import { DollarSign, TrendingUp, TrendingDown, Wallet, BarChart3, Gem } from "lucide-react"
 import Link from "next/link"
@@ -57,19 +57,19 @@ export default function InsightsPage() {
       <div className="grid gap-2 sm:gap-3 grid-cols-2 lg:grid-cols-4 mb-8">
         <StatCard
           title="Net Worth"
-          value={formatCurrency(netWorth)}
+          value={formatCompact(netWorth)}
           icon={DollarSign}
           gradient={{ from: "from-indigo-500/25", to: "to-violet-500/5", ring: "ring-indigo-500/40", accent: "text-indigo-400" }}
         />
         <StatCard
           title="Total Income"
-          value={formatCurrency(totalIncome)}
+          value={formatCompact(totalIncome)}
           icon={TrendingUp}
           gradient={{ from: "from-emerald-500/25", to: "to-teal-500/5", ring: "ring-emerald-500/40", accent: "text-emerald-400" }}
         />
         <StatCard
           title="Total Expenses"
-          value={formatCurrency(totalExpenses)}
+          value={formatCompact(totalExpenses)}
           icon={TrendingDown}
           gradient={{ from: "from-red-500/25", to: "to-rose-500/5", ring: "ring-red-500/40", accent: "text-red-400" }}
         />

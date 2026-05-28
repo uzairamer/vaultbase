@@ -6,7 +6,7 @@ import { PageHeader } from "@/components/shared/page-header"
 import { StatCard } from "@/components/shared/stat-card"
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card"
 import { DollarSign, TrendingUp, Calendar, Briefcase } from "lucide-react"
-import { formatCurrency, formatPercent } from "@/lib/utils"
+import { formatCurrency, formatCompact, formatPercent } from "@/lib/utils"
 import { format } from "date-fns"
 import { Badge } from "@/components/ui/badge"
 
@@ -30,19 +30,19 @@ export default function SideInvestmentDetailPage({ params }: { params: Promise<{
       <div className="grid gap-2 sm:gap-3 grid-cols-2 lg:grid-cols-4 mb-8">
         <StatCard
           title="Invested"
-          value={formatCurrency(invested)}
+          value={formatCompact(invested)}
           icon={DollarSign}
           gradient={{ from: "from-indigo-500/25", to: "to-violet-500/5", ring: "ring-indigo-500/40", accent: "text-indigo-400" }}
         />
         <StatCard
           title="Current Value"
-          value={formatCurrency(current)}
+          value={formatCompact(current)}
           icon={Briefcase}
           gradient={{ from: "from-pink-500/25", to: "to-rose-500/5", ring: "ring-pink-500/40", accent: "text-pink-400" }}
         />
         <StatCard
           title="P&L"
-          value={`${formatCurrency(pnl)} (${formatPercent(pnlPct)})`}
+          value={`${formatCompact(pnl)} (${formatPercent(pnlPct)})`}
           icon={TrendingUp}
           gradient={pnl >= 0
             ? { from: "from-emerald-500/25", to: "to-teal-500/5", ring: "ring-emerald-500/40", accent: "text-emerald-400" }

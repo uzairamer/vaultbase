@@ -11,7 +11,7 @@ import { Label } from "@/components/ui/label"
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select"
 import { EmptyState } from "@/components/shared/empty-state"
 import { Plus, Receipt, Trash2, ArrowDownLeft, ArrowUpRight, X, Filter } from "lucide-react"
-import { cn, formatCurrency } from "@/lib/utils"
+import { cn, formatCurrency, formatCompact } from "@/lib/utils"
 import { format } from "date-fns"
 import { Badge } from "@/components/ui/badge"
 import { toast } from "sonner"
@@ -266,7 +266,7 @@ export default function ExpensesPage() {
                 )}>
                   <p className="text-[10px] sm:text-xs uppercase tracking-wide text-muted-foreground font-medium">Net</p>
                   <p className={cn("text-sm sm:text-lg font-bold tabular-nums leading-tight truncate mt-0.5", netPositive ? "text-emerald-400" : "text-red-400")}>
-                    {netPositive ? "+" : ""}{formatCurrency(net)}
+                    {netPositive ? "+" : ""}{formatCompact(net)}
                   </p>
                   <p className="text-[10px] sm:text-xs text-muted-foreground mt-0.5">{filtered.length} transactions</p>
                 </button>
@@ -277,7 +277,7 @@ export default function ExpensesPage() {
               filterType === "inflow" && "ring-2 ring-emerald-400",
             )}>
               <p className="text-[10px] sm:text-xs uppercase tracking-wide text-muted-foreground font-medium">Total Inflow</p>
-              <p className="text-sm sm:text-lg font-bold text-emerald-400 tabular-nums leading-tight truncate mt-0.5">+{formatCurrency(totalInflow)}</p>
+              <p className="text-sm sm:text-lg font-bold text-emerald-400 tabular-nums leading-tight truncate mt-0.5">+{formatCompact(totalInflow)}</p>
               <p className="text-[10px] sm:text-xs text-muted-foreground mt-0.5">{cashFiltered.filter((t) => t.type === "inflow").length} transactions</p>
             </button>
             <button onClick={() => setFilterType(filterType === "outflow" ? "all" : "outflow")} className={cn(
@@ -285,7 +285,7 @@ export default function ExpensesPage() {
               filterType === "outflow" && "ring-2 ring-red-400",
             )}>
               <p className="text-[10px] sm:text-xs uppercase tracking-wide text-muted-foreground font-medium">Total Outflow</p>
-              <p className="text-sm sm:text-lg font-bold text-red-400 tabular-nums leading-tight truncate mt-0.5">-{formatCurrency(totalOutflow)}</p>
+              <p className="text-sm sm:text-lg font-bold text-red-400 tabular-nums leading-tight truncate mt-0.5">-{formatCompact(totalOutflow)}</p>
               <p className="text-[10px] sm:text-xs text-muted-foreground mt-0.5">{cashFiltered.filter((t) => t.type === "outflow").length} transactions</p>
             </button>
           </div>

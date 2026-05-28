@@ -46,8 +46,9 @@ export async function POST(req: Request) {
   const p = await prisma.property.findUnique({ where: { id: propertyId } })
   if (!p) return NextResponse.json({ error: "Property not found" }, { status: 404 })
 
-  // Wipe ALL existing installments — this is a destructive regenerate
+  // Wipe ALL existing installments and unlock — drops into draft for review
   await prisma.installment.deleteMany({ where: { propertyId } })
+  await prisma.property.update({ where: { id: propertyId }, data: { ledgerLocked: false } })
 
   // Build new ledger
   const rows: Array<{ type: string; amount: number; dueDate: Date; status?: string; paidDate?: Date }> = []

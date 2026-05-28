@@ -8,7 +8,7 @@ import { Button } from "@/components/ui/button"
 import { Badge } from "@/components/ui/badge"
 import { Separator } from "@/components/ui/separator"
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select"
-import { formatCurrency } from "@/lib/utils"
+import { formatCurrency, formatCompact } from "@/lib/utils"
 import { Printer, TrendingUp, TrendingDown, Minus, Building2, BarChart3, Gem, Briefcase, Wallet, Users, HandCoins } from "lucide-react"
 
 const QUARTERS = [
@@ -174,7 +174,7 @@ export default function GenerateReportPage() {
           <div className="grid gap-2 sm:gap-3 grid-cols-1 md:grid-cols-3">
             <div className="relative overflow-hidden rounded-xl border bg-gradient-to-br from-indigo-500/25 to-violet-500/5 p-4 ring-1 ring-indigo-500/40">
               <p className="text-xs uppercase tracking-wide text-muted-foreground font-medium">Net Worth</p>
-              <p className="text-2xl sm:text-3xl font-bold tabular-nums mt-1">{formatCurrency(report.netWorth)}</p>
+              <p className="text-2xl sm:text-3xl font-bold tabular-nums mt-1">{formatCompact(report.netWorth)}</p>
               <p className="text-xs text-muted-foreground mt-1.5">As of end of {report.period.label}</p>
             </div>
             <div className="relative overflow-hidden rounded-xl border bg-gradient-to-br from-emerald-500/25 to-teal-500/5 p-4 ring-1 ring-emerald-500/40">
@@ -182,7 +182,7 @@ export default function GenerateReportPage() {
                 <TrendingUp className="h-4 w-4" />
                 <p className="text-xs uppercase tracking-wide font-medium">Total Assets</p>
               </div>
-              <p className="text-2xl font-bold mt-1 tabular-nums">{formatCurrency(report.assets.totalAssets)}</p>
+              <p className="text-2xl font-bold mt-1 tabular-nums">{formatCompact(report.assets.totalAssets)}</p>
               <p className="text-xs text-muted-foreground mt-1">Across all asset classes</p>
             </div>
             <div className="relative overflow-hidden rounded-xl border bg-gradient-to-br from-red-500/25 to-rose-500/5 p-4 ring-1 ring-red-500/40">
@@ -190,7 +190,7 @@ export default function GenerateReportPage() {
                 <TrendingDown className="h-4 w-4" />
                 <p className="text-xs uppercase tracking-wide font-medium">Total Liabilities</p>
               </div>
-              <p className="text-2xl font-bold mt-1 tabular-nums">{formatCurrency(report.liabilities.total)}</p>
+              <p className="text-2xl font-bold mt-1 tabular-nums">{formatCompact(report.liabilities.total)}</p>
               <p className="text-xs text-muted-foreground mt-1">Outstanding debts</p>
             </div>
           </div>

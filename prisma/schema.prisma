@@ -222,6 +222,7 @@ model Property {
   purchaseDate         DateTime
   notes                String?
   archivedAt           DateTime?
+  ledgerLocked         Boolean   @default(false)
   createdAt            DateTime  @default(now())
   updatedAt            DateTime  @updatedAt
 

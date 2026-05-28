@@ -13,7 +13,7 @@ import { StatCard } from "@/components/shared/stat-card"
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table"
 import { Plus, TrendingUp, DollarSign, BarChart3, Hash } from "lucide-react"
 import { Badge } from "@/components/ui/badge"
-import { formatCurrency, formatPercent } from "@/lib/utils"
+import { formatCurrency, formatCompact, formatPercent } from "@/lib/utils"
 import { format } from "date-fns"
 import { toast } from "sonner"
 
@@ -71,19 +71,19 @@ export default function StockDetailPage({ params }: { params: Promise<{ id: stri
         />
         <StatCard
           title="Avg Buy Price"
-          value={formatCurrency(avg)}
+          value={formatCompact(avg)}
           icon={DollarSign}
           gradient={{ from: "from-indigo-500/25", to: "to-violet-500/5", ring: "ring-indigo-500/40", accent: "text-indigo-400" }}
         />
         <StatCard
           title="Current Value"
-          value={formatCurrency(value)}
+          value={formatCompact(value)}
           icon={BarChart3}
           gradient={{ from: "from-purple-500/25", to: "to-fuchsia-500/5", ring: "ring-purple-500/40", accent: "text-purple-400" }}
         />
         <StatCard
           title="P&L"
-          value={`${formatCurrency(pnl)} (${formatPercent(pnlPct)})`}
+          value={`${formatCompact(pnl)} (${formatPercent(pnlPct)})`}
           icon={TrendingUp}
           gradient={pnl >= 0
             ? { from: "from-emerald-500/25", to: "to-teal-500/5", ring: "ring-emerald-500/40", accent: "text-emerald-400" }

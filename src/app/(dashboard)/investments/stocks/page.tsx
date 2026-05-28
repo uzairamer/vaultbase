@@ -329,16 +329,22 @@ export default function StocksPage() {
   return (
     <div className="space-y-6">
       <PageHeader title="Stocks" description={`Portfolio value: ${formatCurrency(totalValue)}`}>
-        <div className="flex gap-2">
+        <div className="flex flex-wrap gap-2">
           {(stocks as Record<string, unknown>[]).length > 0 && (
             <Button variant="outline" className="text-orange-600 border-orange-200 hover:bg-orange-50 dark:border-orange-900 dark:hover:bg-orange-950" onClick={() => setArchiveOpen(true)}>
-              <Archive className="mr-2 h-4 w-4" /> Archive All
+              <Archive className="mr-2 h-4 w-4" />
+              <span className="hidden sm:inline">Archive All</span>
+              <span className="sm:hidden">Archive</span>
             </Button>
           )}
           {heldSymbols.length > 0 && (
             <Dialog open={sellOpen} onOpenChange={(o) => { setSellOpen(o); if (!o) { setSelectedSymbol(""); setSelectedWalletId("") } }}>
               <DialogTrigger asChild>
-                <Button variant="outline"><TrendingDown className="mr-2 h-4 w-4" /> Sell Stock</Button>
+                <Button variant="outline">
+                  <TrendingDown className="mr-2 h-4 w-4" />
+                  <span className="hidden sm:inline">Sell Stock</span>
+                  <span className="sm:hidden">Sell</span>
+                </Button>
               </DialogTrigger>
               <DialogContent>
                 <DialogHeader><DialogTitle>Sell Stock</DialogTitle></DialogHeader>
@@ -419,7 +425,11 @@ export default function StocksPage() {
 
           <Dialog open={addOpen} onOpenChange={setAddOpen}>
             <DialogTrigger asChild>
-              <Button><Plus className="mr-2 h-4 w-4" /> Add Stock</Button>
+              <Button>
+                <Plus className="mr-2 h-4 w-4" />
+                <span className="hidden sm:inline">Add Stock</span>
+                <span className="sm:hidden">Add</span>
+              </Button>
             </DialogTrigger>
             <DialogContent>
               <DialogHeader><DialogTitle>Add Stock Holding</DialogTitle></DialogHeader>

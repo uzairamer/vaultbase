@@ -28,7 +28,9 @@ export default function StockDetailPage({ params }: { params: Promise<{ id: stri
 
   const s = stock as Record<string, unknown>
   const trades = (s.trades as Record<string, unknown>[]) || []
-  const qty = Number(s.quantity)
+  const buyQty = Number(s.quantity)
+  const soldQty = trades.filter((t) => t.type === "sell").reduce((a, t) => a + Number(t.quantity), 0)
+  const qty = Math.max(0, buyQty - soldQty)
   const avg = Number(s.avgBuyPrice)
   const cur = Number(s.currentPrice ?? avg)
   const value = qty * cur

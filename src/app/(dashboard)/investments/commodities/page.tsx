@@ -26,7 +26,12 @@ export default function CommoditiesPage() {
   const [archiveOpen, setArchiveOpen] = useState(false)
 
   const totalValue = (commodities as Record<string, unknown>[]).reduce((sum: number, c: Record<string, unknown>) => {
-    return sum + Number(c.quantity) * Number(c.currentPrice ?? c.avgBuyPrice)
+    const buyQty = Number(c.quantity)
+    const soldQty = ((c.trades as Record<string, unknown>[] | undefined) ?? [])
+      .filter((t) => t.type === "sell")
+      .reduce((a: number, t) => a + Number(t.quantity), 0)
+    const netQty = Math.max(0, buyQty - soldQty)
+    return sum + netQty * Number(c.currentPrice ?? c.avgBuyPrice)
   }, 0)
 
   function handleSubmit(e: React.FormEvent<HTMLFormElement>) {
@@ -115,7 +120,11 @@ export default function CommoditiesPage() {
       ) : (
         <div className="grid gap-2 sm:gap-3 grid-cols-1 sm:grid-cols-2 lg:grid-cols-3">
           {(commodities as Record<string, unknown>[]).map((c) => {
-            const qty = Number(c.quantity)
+            const buyQty = Number(c.quantity)
+            const soldQty = ((c.trades as Record<string, unknown>[] | undefined) ?? [])
+              .filter((t) => t.type === "sell")
+              .reduce((a: number, t) => a + Number(t.quantity), 0)
+            const qty = Math.max(0, buyQty - soldQty)
             const avg = Number(c.avgBuyPrice)
             const cur = Number(c.currentPrice ?? avg)
             const value = qty * cur

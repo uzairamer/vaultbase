@@ -1,6 +1,7 @@
 import { auth } from "@/lib/auth"
 import { prisma } from "@/lib/prisma"
 import { cn, formatCurrency } from "@/lib/utils"
+import { totalStocksValue } from "@/lib/stocks"
 import { PageHeader } from "@/components/shared/page-header"
 import { Building2, BarChart3, Gem, Briefcase } from "lucide-react"
 import Link from "next/link"
@@ -16,9 +17,9 @@ export default async function InvestmentsPage() {
   const userId = session.user.id
 
   const [properties, stocks, commodities, sideInvestments] = await Promise.all([
-    prisma.property.findMany({ where: { userId } }),
-    prisma.stockHolding.findMany({ where: { userId } }),
-    prisma.commodityHolding.findMany({ where: { userId } }),
+    prisma.property.findMany({ where: { userId, archivedAt: null } }),
+    prisma.stockHolding.findMany({ where: { userId, archivedAt: null }, include: { trades: true } }),
+    prisma.commodityHolding.findMany({ where: { userId, archivedAt: null }, include: { trades: true } }),
     prisma.sideInvestment.findMany({ where: { userId, status: "active" } }),
   ])
 
@@ -26,12 +27,14 @@ export default async function InvestmentsPage() {
     (sum, p) => sum + toNum(p.currentValue ?? p.totalPrice),
     0
   )
-  const stocksValue = stocks.reduce(
-    (sum, s) => sum + toNum(s.quantity) * toNum(s.currentPrice ?? s.avgBuyPrice),
-    0
-  )
+  const stocksValue = totalStocksValue(stocks)
   const commoditiesValue = commodities.reduce(
-    (sum, c) => sum + toNum(c.quantity) * toNum(c.currentPrice ?? c.avgBuyPrice),
+    (sum, c) => {
+      const buyQty = toNum(c.quantity)
+      const soldQty = (c.trades ?? []).filter((t) => t.type === "sell").reduce((a, t) => a + toNum(t.quantity), 0)
+      const netQty = Math.max(0, buyQty - soldQty)
+      return sum + netQty * toNum(c.currentPrice ?? c.avgBuyPrice)
+    },
     0
   )
   const sideValue = sideInvestments.reduce((sum, s) => sum + toNum(s.currentValue), 0)
@@ -99,7 +102,7 @@ export default async function InvestmentsPage() {
         description={`Total portfolio value: ${formatCurrency(totalValue)}`}
       />
 
-      <div className="grid gap-2 sm:gap-3 grid-cols-2 lg:grid-cols-4 mb-8">
+      <div className="grid gap-2 sm:gap-3 grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 mb-8">
         {categories.map((cat) => (
           <Link key={cat.href} href={cat.href}>
             <div className={cn(

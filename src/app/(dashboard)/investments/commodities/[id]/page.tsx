@@ -28,7 +28,9 @@ export default function CommodityDetailPage({ params }: { params: Promise<{ id: 
 
   const c = commodity as Record<string, unknown>
   const trades = (c.trades as Record<string, unknown>[]) || []
-  const qty = Number(c.quantity)
+  const buyQty = Number(c.quantity)
+  const soldQty = trades.filter((t) => t.type === "sell").reduce((a, t) => a + Number(t.quantity), 0)
+  const qty = Math.max(0, buyQty - soldQty)
   const avg = Number(c.avgBuyPrice)
   const cur = Number(c.currentPrice ?? avg)
   const value = qty * cur

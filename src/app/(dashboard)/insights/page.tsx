@@ -4,6 +4,7 @@ import { useInsightsData } from "@/modules/insights/hooks"
 import { PageHeader } from "@/components/shared/page-header"
 import { StatCard } from "@/components/shared/stat-card"
 import { cn, formatCurrency } from "@/lib/utils"
+import { totalStocksValue } from "@/lib/stocks"
 import { DollarSign, TrendingUp, TrendingDown, Wallet, BarChart3, Gem } from "lucide-react"
 import Link from "next/link"
 
@@ -24,8 +25,15 @@ export default function InsightsPage() {
 
   const walletBalance = wallets.reduce((sum, w) => sum + Number(w.balance), 0)
   const realEstateValue = properties.reduce((sum, p) => sum + Number(p.currentValue ?? p.totalPrice), 0)
-  const stocksValue = stocks.reduce((sum, s) => sum + Number(s.quantity) * Number(s.currentPrice ?? s.avgBuyPrice), 0)
-  const commoditiesValue = commodities.reduce((sum, c) => sum + Number(c.quantity) * Number(c.currentPrice ?? c.avgBuyPrice), 0)
+  const stocksValue = totalStocksValue(stocks as unknown as Parameters<typeof totalStocksValue>[0])
+  const commoditiesValue = commodities.reduce((sum, c) => {
+    const buyQty = Number(c.quantity)
+    const soldQty = ((c.trades as Record<string, unknown>[] | undefined) ?? [])
+      .filter((t) => t.type === "sell")
+      .reduce((a, t) => a + Number(t.quantity), 0)
+    const netQty = Math.max(0, buyQty - soldQty)
+    return sum + netQty * Number(c.currentPrice ?? c.avgBuyPrice)
+  }, 0)
   const sideValue = sideInvestments.filter((s) => s.status === "active").reduce((sum, s) => sum + Number(s.currentValue), 0)
   const receivablesTotal = receivables.filter((r) => r.status !== "settled").reduce((sum, r) => sum + Number(r.amount) - Number(r.amountPaid), 0)
   const personalLiabilitiesTotal = liabilities.filter((l) => l.status !== "settled").reduce((sum, l) => sum + Number(l.amount) - Number(l.amountPaid), 0)

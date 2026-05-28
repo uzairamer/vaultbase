@@ -4,6 +4,7 @@ import { useState, useEffect } from "react"
 import { useQuery } from "@tanstack/react-query"
 import { useSession } from "next-auth/react"
 import { formatCurrency } from "@/lib/utils"
+import { totalStocksValue } from "@/lib/stocks"
 import { StatCard } from "@/components/shared/stat-card"
 import {
   Wallet,
@@ -76,8 +77,15 @@ export default function DashboardPage() {
 
   const walletBalance = wallets.reduce((sum, w) => sum + Number(w.balance), 0)
   const realEstateValue = properties.reduce((sum, p) => sum + Number(p.currentValue ?? p.totalPrice), 0)
-  const stocksValue = stocks.reduce((sum, s) => sum + Number(s.quantity) * Number(s.currentPrice ?? s.avgBuyPrice), 0)
-  const commoditiesValue = commodities.reduce((sum, c) => sum + Number(c.quantity) * Number(c.currentPrice ?? c.avgBuyPrice), 0)
+  const stocksValue = totalStocksValue(stocks as unknown as Parameters<typeof totalStocksValue>[0])
+  const commoditiesValue = commodities.reduce((sum, c) => {
+    const buyQty = Number(c.quantity)
+    const soldQty = ((c.trades as Record<string, unknown>[] | undefined) ?? [])
+      .filter((t) => t.type === "sell")
+      .reduce((a, t) => a + Number(t.quantity), 0)
+    const netQty = Math.max(0, buyQty - soldQty)
+    return sum + netQty * Number(c.currentPrice ?? c.avgBuyPrice)
+  }, 0)
   const sideValue = sideInvestments.filter((s) => s.status === "active").reduce((sum, s) => sum + Number(s.currentValue), 0)
   const receivablesTotal = receivables.filter((r) => r.status !== "settled").reduce((sum, r) => sum + Number(r.amount) - Number(r.amountPaid), 0)
   const personalLiabilitiesTotal = liabilities.filter((l) => l.status !== "settled").reduce((sum, l) => sum + Number(l.amount) - Number(l.amountPaid), 0)
@@ -128,7 +136,7 @@ export default function DashboardPage() {
         description={`Welcome back, ${session?.user?.name || "there"}!`}
       />
 
-      <div className="grid gap-2 sm:gap-3 grid-cols-2 lg:grid-cols-4 mb-8">
+      <div className="grid gap-2 sm:gap-3 grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 mb-8">
         <StatCard
           title="Net Worth"
           value={formatCurrency(animNetWorth)}
@@ -168,7 +176,7 @@ export default function DashboardPage() {
       </div>
 
       <h2 className="text-xl font-semibold mb-4">Investment Breakdown</h2>
-      <div className="grid gap-2 sm:gap-3 grid-cols-2 lg:grid-cols-4 mb-8">
+      <div className="grid gap-2 sm:gap-3 grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 mb-8">
         <StatCard
           title="Real Estate"
           value={formatCurrency(animRealEstateValue)}
@@ -201,35 +209,33 @@ export default function DashboardPage() {
 
       {/* Transactions Ledger */}
       <Card className="mb-8">
-        <CardHeader className="flex flex-col gap-2">
-          <div className="flex items-center justify-between">
-            <div>
-              <CardTitle className="text-base">{filterLabel[ledgerFilter]}</CardTitle>
-              <p className="text-xs text-muted-foreground mt-1">{filteredTxs.length} transaction(s)</p>
-            </div>
-            <Link href="/expenses">
-              <Button variant="outline" size="sm" className="text-xs">Full view</Button>
-            </Link>
+        <CardHeader className="flex flex-col gap-3 pb-3">
+          <div>
+            <CardTitle className="text-base">{filterLabel[ledgerFilter]}</CardTitle>
+            <p className="text-xs text-muted-foreground mt-1">{filteredTxs.length} transaction(s)</p>
           </div>
-          <div className="flex items-center gap-2 flex-wrap">
-            <div className="flex gap-1">
+          <div className="flex items-center justify-between gap-2 flex-wrap">
+            <div className="flex gap-1 flex-wrap">
               {(["all", "inflow", "outflow"] as LedgerFilter[]).map((f) => (
                 <Button
                   key={f}
                   size="sm"
                   variant={ledgerFilter === f ? "default" : "outline"}
                   onClick={() => setLedgerFilter(f)}
-                  className="text-xs"
+                  className="text-xs h-7 px-2.5"
                 >
                   {f === "all" ? "All" : f === "inflow" ? "Inflows" : "Outflows"}
                 </Button>
               ))}
+              {ledgerFilter !== "all" && ledgerFilter !== "inflow" && ledgerFilter !== "outflow" && (
+                <Button variant="ghost" size="sm" onClick={() => setLedgerFilter("all")} className="text-xs h-7 px-2.5">
+                  Clear filter
+                </Button>
+              )}
             </div>
-            {ledgerFilter !== "all" && (
-              <Button variant="ghost" size="sm" onClick={() => setLedgerFilter("all")} className="text-xs">
-                Clear filter
-              </Button>
-            )}
+            <Link href="/expenses">
+              <Button variant="outline" size="sm" className="text-xs h-7 px-2.5">Full view</Button>
+            </Link>
           </div>
         </CardHeader>
         <CardContent>
@@ -292,7 +298,7 @@ export default function DashboardPage() {
           <CardTitle>Portfolio Overview</CardTitle>
         </CardHeader>
         <CardContent>
-          <div className="space-y-3">
+          <div className="space-y-4">
             {[
               { label: "Wallets", value: walletBalance, color: "bg-blue-500" },
               { label: "Real Estate", value: realEstateValue, color: "bg-green-500" },
@@ -302,21 +308,25 @@ export default function DashboardPage() {
             ].map((item, index) => {
               const pct = totalAssets > 0 ? (item.value / totalAssets) * 100 : 0
               return (
-                <div key={item.label} className="flex items-center gap-3 min-w-0">
-                  <div className={`h-3 w-3 rounded-full shrink-0 ${item.color}`} />
-                  <span className="text-sm shrink-0 w-24 sm:w-32">{item.label}</span>
-                  <div className="flex-1 h-2 bg-muted rounded-full overflow-hidden min-w-0">
-                    <div
-                      className={`h-full ${item.color} rounded-full transition-all duration-1000 ease-out`}
-                      style={{ width: mounted ? `${pct}%` : "0%", transitionDelay: `${index * 150}ms` }}
-                    />
+                <div key={item.label} className="space-y-1.5">
+                  <div className="flex items-center gap-2 min-w-0">
+                    <div className={`h-2.5 w-2.5 rounded-full shrink-0 ${item.color}`} />
+                    <span className="text-sm flex-1 truncate">{item.label}</span>
+                    <span className="text-sm font-semibold tabular-nums shrink-0">
+                      {formatCurrency(item.value)}
+                    </span>
                   </div>
-                  <span className="text-sm text-muted-foreground shrink-0 text-right w-12 sm:w-16">
-                    {pct.toFixed(1)}%
-                  </span>
-                  <span className="text-sm font-medium shrink-0 text-right w-24 sm:w-28">
-                    {formatCurrency(item.value)}
-                  </span>
+                  <div className="flex items-center gap-2 pl-4">
+                    <div className="flex-1 h-1.5 bg-muted rounded-full overflow-hidden">
+                      <div
+                        className={`h-full ${item.color} rounded-full transition-all duration-1000 ease-out`}
+                        style={{ width: mounted ? `${pct}%` : "0%", transitionDelay: `${index * 150}ms` }}
+                      />
+                    </div>
+                    <span className="text-[11px] text-muted-foreground tabular-nums shrink-0 w-12 text-right">
+                      {pct.toFixed(1)}%
+                    </span>
+                  </div>
                 </div>
               )
             })}

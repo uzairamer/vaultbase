@@ -34,12 +34,12 @@ const SUBTYPES: Record<string, string> = {
 
 function AssetRow({ label, value, sub }: { label: string; value: number; sub?: string }) {
   return (
-    <div className="flex items-baseline justify-between py-1.5">
-      <div>
-        <span className="text-sm">{label}</span>
-        {sub && <span className="ml-2 text-xs text-muted-foreground">{sub}</span>}
+    <div className="flex items-start justify-between gap-3 py-1.5">
+      <div className="min-w-0 flex-1">
+        <p className="text-sm truncate">{label}</p>
+        {sub && <p className="text-xs text-muted-foreground truncate">{sub}</p>}
       </div>
-      <span className="text-sm font-medium tabular-nums">{formatCurrency(value)}</span>
+      <span className="text-sm font-medium tabular-nums shrink-0">{formatCurrency(value)}</span>
     </div>
   )
 }
@@ -85,6 +85,40 @@ export default function GenerateReportPage() {
 
   return (
     <div>
+      {/* Print overrides — flatten dark-mode colors to clean black-on-white */}
+      <style>{`
+        @media print {
+          html, body, .dark, [data-theme="dark"] {
+            background: #fff !important;
+            color: #000 !important;
+            color-scheme: light !important;
+          }
+          /* Headings & body text → black */
+          h1, h2, h3, h4, h5, h6, p, span, div, li, td, th, label {
+            color: #000 !important;
+          }
+          /* Muted text → readable dark grey, not the dim --muted-foreground */
+          .text-muted-foreground { color: #4b5563 !important; }
+          /* Remove low-opacity / dim modifiers */
+          .opacity-70, .opacity-80, .opacity-50, .opacity-60 { opacity: 1 !important; }
+          /* Card backgrounds → white, borders → light grey */
+          [class*="bg-card"], [class*="bg-muted"], [class*="bg-background"] {
+            background: #fff !important;
+          }
+          [class*="border"] { border-color: #d1d5db !important; }
+          /* Keep semantic colors readable */
+          .text-green-600, .dark\\:text-green-400 { color: #15803d !important; }
+          .text-red-600, .dark\\:text-red-400, .text-red-500 { color: #b91c1c !important; }
+          .text-emerald-400, .text-emerald-500 { color: #15803d !important; }
+          /* Gradient stat-card backgrounds — strip the gradient for clarity */
+          [class*="bg-gradient-to-br"] {
+            background: #f9fafb !important;
+            border-color: #d1d5db !important;
+          }
+          /* Hide navigation chrome */
+          [data-slot="sidebar"], [data-slot="sidebar-inset"] > *:first-child { display: none !important; }
+        }
+      `}</style>
       <PageHeader
         title="Financial Position"
         description="Quarterly balance sheet of your complete financial position"

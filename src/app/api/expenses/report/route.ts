@@ -27,7 +27,7 @@ export async function GET(req: Request) {
     await Promise.all([
       prisma.wallet.findMany({ where: { userId }, include: { segments: true } }),
       prisma.stockHolding.findMany({ where: { userId, archivedAt: null }, include: { trades: { where: { type: "sell" } } } }),
-      prisma.commodityHolding.findMany({ where: { userId, archivedAt: null } }),
+      prisma.commodityHolding.findMany({ where: { userId, archivedAt: null }, include: { trades: { where: { type: "sell" } } } }),
       prisma.property.findMany({ where: { userId, archivedAt: null }, include: { installments: true } }),
       prisma.sideInvestment.findMany({ where: { userId } }),
       prisma.receivable.findMany({ where: { userId, status: { not: "settled" } } }),
@@ -80,7 +80,9 @@ export async function GET(req: Request) {
   const stockTotal = stockItems.reduce((sum, s) => sum + s.value, 0)
 
   const commodityItems = commodities.map((c) => {
-    const qty = Number(c.quantity)
+    const buyQty = Number(c.quantity)
+    const soldQty = (c.trades ?? []).reduce((sum, t) => sum + Number(t.quantity), 0)
+    const qty = Math.max(0, buyQty - soldQty)
     const price = c.currentPrice ? Number(c.currentPrice) : Number(c.avgBuyPrice)
     return {
       type: c.type,

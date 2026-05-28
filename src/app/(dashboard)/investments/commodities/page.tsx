@@ -49,6 +49,7 @@ export default function CommoditiesPage() {
   const [formUnit, setFormUnit] = useState("")
   const [formQty, setFormQty] = useState("")
   const [formPrice, setFormPrice] = useState("")
+  const [formDate, setFormDate] = useState(new Date().toISOString().slice(0, 10))
   const [buyWalletId, setBuyWalletId] = useState("none")
 
   // Sell dialog state
@@ -79,6 +80,7 @@ export default function CommoditiesPage() {
     setFormUnit("")
     setFormQty("")
     setFormPrice("")
+    setFormDate(new Date().toISOString().slice(0, 10))
     setBuyWalletId("none")
   }
 
@@ -93,6 +95,7 @@ export default function CommoditiesPage() {
         unit: formUnit,
         quantity: Number(formQty),
         totalCostPaid: Number(formPrice),
+        purchaseDate: formDate,
         staticPriceId: selectedStaticPrice,
         walletId: buyWalletId !== "none" ? buyWalletId : null,
       },
@@ -216,6 +219,14 @@ export default function CommoditiesPage() {
                 </div>
 
                 <div className="space-y-2">
+                  <Label>Purchase Date</Label>
+                  <Input
+                    type="date" required
+                    value={formDate} onChange={(e) => setFormDate(e.target.value)}
+                  />
+                </div>
+
+                <div className="space-y-2">
                   <Label>Total Amount Paid <span className="text-muted-foreground font-normal text-xs">(incl. tax &amp; charges)</span></Label>
                   <Input
                     type="number" step="0.01" min="0" placeholder="e.g. 204000" required
@@ -303,6 +314,7 @@ export default function CommoditiesPage() {
                     </div>
                     <p className="text-[11px] text-muted-foreground mt-0.5 tabular-nums">
                       {isSold ? `${buyQty} ${c.unit as string} sold` : `${qty} ${c.unit as string} held`}
+                      {c.purchaseDate ? ` · ${new Date(c.purchaseDate as string).toLocaleDateString("en-PK", { day: "numeric", month: "short", year: "numeric" })}` : ""}
                       {c.unit as string === "gram" || c.unit as string === "tola" || c.unit as string === "oz" ? "" : ""}
                     </p>
                   </div>

@@ -62,7 +62,10 @@ export default function CommodityDetailPage({ params }: { params: Promise<{ id: 
 
   return (
     <div>
-      <PageHeader title={`${(c.type as string).charAt(0).toUpperCase() + (c.type as string).slice(1)}`} description={`${qty} ${c.unit as string}`} />
+      <PageHeader
+        title={`${(c.type as string).charAt(0).toUpperCase() + (c.type as string).slice(1)}`}
+        description={`${qty} ${c.unit as string}${c.purchaseDate ? ` · Bought ${format(new Date(c.purchaseDate as string), "d MMM yyyy")}` : ""}`}
+      />
 
       <div className="grid gap-2 sm:gap-3 grid-cols-2 lg:grid-cols-4 mb-8">
         <StatCard

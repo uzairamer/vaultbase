@@ -302,6 +302,7 @@ model CommodityHolding {
   quantity       Decimal   @db.Decimal(15, 4)
   avgBuyPrice    Decimal   @db.Decimal(15, 4)  // derived: totalCostPaid / quantity
   totalCostPaid  Decimal?  @db.Decimal(15, 2)  // actual amount paid incl. tax & charges
+  purchaseDate   DateTime  @default(now())
   currentPrice   Decimal?  @db.Decimal(15, 4)
   staticPriceId  String?
   currency       String    @default("PKR")

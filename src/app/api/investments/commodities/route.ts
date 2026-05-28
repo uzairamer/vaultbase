@@ -20,10 +20,11 @@ const holdingSchema = z.object({
   quantity: z.coerce.number().positive(),
   totalCostPaid: z.coerce.number().positive(),
   avgBuyPrice: z.coerce.number().positive().optional(),
+  purchaseDate: z.coerce.date().optional(),
   currentPrice: z.coerce.number().optional().nullable(),
   staticPriceId: z.string().optional().nullable(),
   currency: z.string().default("PKR"),
-  walletId: z.string().optional().nullable(),  // optional — deduct purchase cost from wallet
+  walletId: z.string().optional().nullable(),
 })
 
 const tradeSchema = z.object({

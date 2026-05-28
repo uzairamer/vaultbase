@@ -32,9 +32,14 @@ export default function CommodityDetailPage({ params }: { params: Promise<{ id: 
   const soldQty = trades.filter((t) => t.type === "sell").reduce((a, t) => a + Number(t.quantity), 0)
   const qty = Math.max(0, buyQty - soldQty)
   const avg = Number(c.avgBuyPrice)
-  const cur = Number(c.currentPrice ?? avg)
+  const totalCostPaid = c.totalCostPaid != null ? Number(c.totalCostPaid) : qty * avg
+  // resolvedPrice comes from the static price series (unit-corrected); fall back to currentPrice then avg
+  const cur = c.resolvedPrice != null ? Number(c.resolvedPrice)
+            : c.currentPrice != null  ? Number(c.currentPrice)
+            : avg
   const value = qty * cur
-  const pnl = value - qty * avg
+  // P&L = current market value vs actual total paid (incl. tax/charges)
+  const pnl = value - totalCostPaid
 
   function handleSubmit(e: React.FormEvent<HTMLFormElement>) {
     e.preventDefault()
@@ -67,8 +72,9 @@ export default function CommodityDetailPage({ params }: { params: Promise<{ id: 
           gradient={{ from: "from-sky-500/25", to: "to-blue-500/5", ring: "ring-sky-500/40", accent: "text-sky-400" }}
         />
         <StatCard
-          title="Avg Buy Price"
-          value={formatCompact(avg)}
+          title="Total Paid"
+          value={formatCompact(totalCostPaid)}
+          numericValue={totalCostPaid}
           icon={DollarSign}
           gradient={{ from: "from-indigo-500/25", to: "to-violet-500/5", ring: "ring-indigo-500/40", accent: "text-indigo-400" }}
         />

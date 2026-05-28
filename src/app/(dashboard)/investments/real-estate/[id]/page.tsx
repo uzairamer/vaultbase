@@ -185,10 +185,10 @@ export default function PropertyDetailPage({ params }: { params: Promise<{ id: s
       <PageHeader title={p.name as string} description={(p.location as string) || "Real Estate Investment"} />
 
       <div className="grid gap-2 grid-cols-2 lg:grid-cols-4">
-        <StatCard title="Total Price"    value={formatCompact(totalPrice)}                        icon={DollarSign}  gradient={{ from: "from-indigo-500/25", to: "to-violet-500/5", ring: "ring-indigo-500/40", accent: "text-indigo-400" }} />
-        <StatCard title="Current Value"  value={formatCompact(Number(p.currentValue ?? p.totalPrice))} icon={TrendingUp}   gradient={{ from: "from-emerald-500/25", to: "to-teal-500/5",   ring: "ring-emerald-500/40", accent: "text-emerald-400" }} />
-        <StatCard title="Total Paid"     value={formatCompact(totalPaid)}                         icon={CheckCircle} gradient={{ from: "from-sky-500/25",     to: "to-blue-500/5",    ring: "ring-sky-500/40",     accent: "text-sky-400" }} />
-        <StatCard title="Remaining"      value={formatCompact(Math.max(0, remaining))}            icon={Wallet}      gradient={{ from: "from-amber-500/25",   to: "to-orange-500/5",  ring: "ring-amber-500/40",   accent: "text-amber-400" }} />
+        <StatCard title="Total Price"    value={formatCompact(totalPrice)}           numericValue={totalPrice}           icon={DollarSign}  gradient={{ from: "from-indigo-500/25", to: "to-violet-500/5",  ring: "ring-indigo-500/40",  accent: "text-indigo-400" }} />
+        <StatCard title="Amount Paid"    value={formatCompact(totalPaid)}            numericValue={totalPaid}            icon={CheckCircle} gradient={{ from: "from-emerald-500/25", to: "to-teal-500/5",   ring: "ring-emerald-500/40", accent: "text-emerald-400" }} />
+        <StatCard title="Still Owed"     value={formatCompact(Math.max(0, debt))}    numericValue={Math.max(0, debt)}    icon={Wallet}      gradient={{ from: "from-amber-500/25",  to: "to-orange-500/5", ring: "ring-amber-500/40",   accent: "text-amber-400" }} />
+        <StatCard title="Missed"         value={overdueDebt > 0 ? formatCompact(overdueDebt) : "None"} numericValue={overdueDebt > 0 ? overdueDebt : undefined} icon={AlertTriangle} gradient={{ from: overdueDebt > 0 ? "from-red-500/25" : "from-slate-500/15", to: overdueDebt > 0 ? "to-rose-500/5" : "to-slate-500/5", ring: overdueDebt > 0 ? "ring-red-500/40" : "ring-slate-500/20", accent: overdueDebt > 0 ? "text-red-400" : "text-muted-foreground" }} />
       </div>
 
       {/* Payment progress bar */}
@@ -363,15 +363,15 @@ export default function PropertyDetailPage({ params }: { params: Promise<{ id: s
             <Card><CardContent className="py-8 text-center text-xs text-muted-foreground">No entries yet. Add rows below or regenerate from a schedule.</CardContent></Card>
           )}
           <Card className="p-0 overflow-hidden">
-            <Table className="text-xs">
+            <Table>
               <TableHeader>
                 <TableRow className="hover:bg-transparent bg-amber-500/10">
-                  <TableHead className="h-8 px-2 text-[10px] uppercase tracking-wide hidden sm:table-cell">#</TableHead>
-                  <TableHead className="h-8 px-2 text-[10px] uppercase tracking-wide">Type</TableHead>
-                  <TableHead className="h-8 px-2 text-[10px] uppercase tracking-wide text-right">Amount</TableHead>
-                  <TableHead className="h-8 px-2 text-[10px] uppercase tracking-wide">Due Date</TableHead>
-                  <TableHead className="h-8 px-2 text-[10px] uppercase tracking-wide">Status</TableHead>
-                  <TableHead className="h-8 px-2 text-[10px] uppercase tracking-wide text-right">Del</TableHead>
+                  <TableHead className="h-10 px-3 text-[10px] uppercase tracking-wide hidden sm:table-cell w-10">#</TableHead>
+                  <TableHead className="h-10 px-3 text-[10px] uppercase tracking-wide w-32">Type</TableHead>
+                  <TableHead className="h-10 px-3 text-[10px] uppercase tracking-wide">Amount</TableHead>
+                  <TableHead className="h-10 px-3 text-[10px] uppercase tracking-wide">Due Date</TableHead>
+                  <TableHead className="h-10 px-3 text-[10px] uppercase tracking-wide w-32">Status</TableHead>
+                  <TableHead className="h-10 px-3 text-[10px] uppercase tracking-wide text-right w-12">Del</TableHead>
                 </TableRow>
               </TableHeader>
               <TableBody>
@@ -380,51 +380,51 @@ export default function PropertyDetailPage({ params }: { params: Promise<{ id: s
                     row.type === "balloon" && "bg-purple-500/[0.06]",
                     row.type === "downpayment" && "bg-blue-500/[0.06]",
                   )}>
-                    <TableCell className="py-1 px-2 font-mono text-muted-foreground hidden sm:table-cell">{i + 1}</TableCell>
-                    <TableCell className="py-1 px-2">
+                    <TableCell className="py-2 px-3 font-mono text-muted-foreground hidden sm:table-cell">{i + 1}</TableCell>
+                    <TableCell className="py-2 px-3">
                       <select
                         value={row.type}
                         onChange={(e) => updateDraftRow(row._key, { type: e.target.value as DraftRow["type"] })}
-                        className="h-7 rounded border border-input bg-background text-xs px-1.5 w-24"
+                        className="h-9 w-full rounded-md border border-input bg-background text-sm px-2"
                       >
                         <option value="regular">Regular</option>
                         <option value="balloon">Balloon</option>
-                        <option value="downpayment">Down</option>
+                        <option value="downpayment">Down Payment</option>
                       </select>
                     </TableCell>
-                    <TableCell className="py-1 px-2">
+                    <TableCell className="py-2 px-3">
                       <Input
                         type="number"
                         step="0.01"
                         min="0"
                         value={row.amount}
                         onChange={(e) => updateDraftRow(row._key, { amount: e.target.value })}
-                        className="h-7 text-xs w-28 text-right"
+                        className="h-9 w-full text-sm text-right"
                         placeholder="0"
                       />
                     </TableCell>
-                    <TableCell className="py-1 px-2">
+                    <TableCell className="py-2 px-3">
                       <Input
                         type="date"
                         value={row.dueDate}
                         onChange={(e) => updateDraftRow(row._key, { dueDate: e.target.value })}
-                        className="h-7 text-xs w-32"
+                        className="h-9 w-full text-sm"
                       />
                     </TableCell>
-                    <TableCell className="py-1 px-2">
+                    <TableCell className="py-2 px-3">
                       <select
                         value={row.status}
                         onChange={(e) => updateDraftRow(row._key, { status: e.target.value as DraftRow["status"] })}
-                        className="h-7 rounded border border-input bg-background text-xs px-1.5 w-20"
+                        className="h-9 w-full rounded-md border border-input bg-background text-sm px-2"
                       >
                         <option value="pending">Pending</option>
                         <option value="paid">Paid</option>
                         <option value="unpaid">Unpaid</option>
                       </select>
                     </TableCell>
-                    <TableCell className="py-1 px-2 text-right">
-                      <button onClick={() => deleteDraftRow(row._key)} className="p-1 rounded hover:bg-red-500/20 text-red-500">
-                        <Trash2 className="h-3.5 w-3.5" />
+                    <TableCell className="py-2 px-3 text-right">
+                      <button onClick={() => deleteDraftRow(row._key)} className="p-1.5 rounded hover:bg-red-500/20 text-red-500">
+                        <Trash2 className="h-4 w-4" />
                       </button>
                     </TableCell>
                   </TableRow>

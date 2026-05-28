@@ -116,6 +116,7 @@ const navItems: NavItem[] = [
     icon: Settings,
     children: [
       { title: "Configs", href: "/settings/configs", icon: KeyRound },
+      { title: "Static Prices", href: "/settings/static-prices", icon: Tag },
     ],
   },
 ]

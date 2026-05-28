@@ -27,7 +27,7 @@ export const metadata: Metadata = {
 export default function RootLayout({ children }: { children: React.ReactNode }) {
   return (
     <html lang="en" className="dark" suppressHydrationWarning>
-      <body className={`${hostGrotesk.className} ${martelSans.variable}`}>
+      <body className={`${hostGrotesk.className} ${martelSans.variable}`} suppressHydrationWarning>
         <AuthSessionProvider>
           <QueryProvider>
             <ThemeProvider>

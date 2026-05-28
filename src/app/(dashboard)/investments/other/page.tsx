@@ -12,6 +12,7 @@ import { Textarea } from "@/components/ui/textarea"
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select"
 import { EmptyState } from "@/components/shared/empty-state"
 import { Plus, Briefcase, Trash2 } from "lucide-react"
+import { ConfirmDeleteDialog } from "@/components/shared/confirm-delete-dialog"
 import { Badge } from "@/components/ui/badge"
 import { cn, formatCurrency, formatPercent } from "@/lib/utils"
 import { SIDE_INVESTMENT_TYPES } from "@/lib/constants"
@@ -23,6 +24,8 @@ export default function OtherInvestmentsPage() {
   const createInv = useCreateSideInvestment()
   const deleteInv = useDeleteSideInvestment()
   const [open, setOpen] = useState(false)
+  const [deleteId, setDeleteId] = useState<string | null>(null)
+  const [deleteName, setDeleteName] = useState("")
 
   const totalValue = (investments as Record<string, unknown>[])
     .filter((i) => i.status === "active")
@@ -129,7 +132,7 @@ export default function OtherInvestmentsPage() {
                       {inv.status as string}
                     </Badge>
                     <Button variant="ghost" size="icon" className="h-7 w-7" onClick={() => {
-                      deleteInv.mutate(inv.id as string, { onSuccess: () => toast.success("Deleted") })
+                      setDeleteId(inv.id as string); setDeleteName(inv.name as string)
                     }}>
                       <Trash2 className="h-3.5 w-3.5" />
                     </Button>
@@ -147,6 +150,17 @@ export default function OtherInvestmentsPage() {
           })}
         </div>
       )}
+      <ConfirmDeleteDialog
+        open={!!deleteId}
+        onOpenChange={(v) => { if (!v) setDeleteId(null) }}
+        title={`Delete ${deleteName}?`}
+        description={`This will permanently delete this investment. This cannot be undone.`}
+        onConfirm={() => deleteInv.mutate(deleteId!, {
+          onSuccess: () => toast.success("Deleted"),
+          onError: (err) => toast.error(err.message),
+        })}
+        isPending={deleteInv.isPending}
+      />
     </div>
   )
 }

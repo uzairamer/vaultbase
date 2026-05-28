@@ -140,6 +140,7 @@ export default function DashboardPage() {
         <StatCard
           title="Net Worth"
           value={formatCompact(animNetWorth)}
+          numericValue={animNetWorth}
           icon={DollarSign}
           gradient={{ from: "from-indigo-500/25", to: "to-violet-500/5", ring: "ring-indigo-500/40", accent: "text-indigo-400" }}
         />
@@ -147,6 +148,7 @@ export default function DashboardPage() {
           <StatCard
             title="Wallet Balance"
             value={formatCompact(animWalletBalance)}
+            numericValue={animWalletBalance}
             subtitle={`${wallets.length} wallet(s)`}
             icon={Wallet}
             gradient={{ from: "from-sky-500/25", to: "to-blue-500/5", ring: "ring-sky-500/40", accent: "text-sky-400" }}
@@ -157,6 +159,7 @@ export default function DashboardPage() {
           <StatCard
             title="Receivables"
             value={formatCompact(animReceivablesTotal)}
+            numericValue={animReceivablesTotal}
             subtitle={`${receivables.filter((r) => r.status !== "settled").length} active`}
             icon={TrendingUp}
             gradient={{ from: "from-emerald-500/25", to: "to-teal-500/5", ring: "ring-emerald-500/40", accent: "text-emerald-400" }}
@@ -167,6 +170,7 @@ export default function DashboardPage() {
           <StatCard
             title="Liabilities"
             value={formatCompact(animLiabilitiesTotal)}
+            numericValue={animLiabilitiesTotal}
             subtitle={`${liabilities.filter((l) => l.status !== "settled").length} active`}
             icon={TrendingDown}
             gradient={{ from: "from-red-500/25", to: "to-rose-500/5", ring: "ring-red-500/40", accent: "text-red-400" }}
@@ -180,6 +184,7 @@ export default function DashboardPage() {
         <StatCard
           title="Real Estate"
           value={formatCompact(animRealEstateValue)}
+          numericValue={animRealEstateValue}
           subtitle={`${properties.length} properties`}
           icon={Building2}
           gradient={{ from: "from-orange-500/25", to: "to-red-500/5", ring: "ring-orange-500/40", accent: "text-orange-400" }}
@@ -187,6 +192,7 @@ export default function DashboardPage() {
         <StatCard
           title="Stocks"
           value={formatCompact(animStocksValue)}
+          numericValue={animStocksValue}
           subtitle={`${stocks.length} holdings`}
           icon={BarChart3}
           gradient={{ from: "from-purple-500/25", to: "to-fuchsia-500/5", ring: "ring-purple-500/40", accent: "text-purple-400" }}
@@ -194,6 +200,7 @@ export default function DashboardPage() {
         <StatCard
           title="Commodities"
           value={formatCompact(animCommoditiesValue)}
+          numericValue={animCommoditiesValue}
           subtitle={`${commodities.length} holdings`}
           icon={Gem}
           gradient={{ from: "from-yellow-500/25", to: "to-amber-500/5", ring: "ring-yellow-500/40", accent: "text-yellow-400" }}
@@ -201,6 +208,7 @@ export default function DashboardPage() {
         <StatCard
           title="Side Investments"
           value={formatCompact(animSideValue)}
+          numericValue={animSideValue}
           subtitle={`${sideInvestments.filter((s) => s.status === "active").length} active`}
           icon={Briefcase}
           gradient={{ from: "from-pink-500/25", to: "to-rose-500/5", ring: "ring-pink-500/40", accent: "text-pink-400" }}

@@ -3,6 +3,7 @@
 import { useState, useMemo } from "react"
 import { useStocks, useCreateStock, useDeleteStock, useSellStock } from "@/modules/investments/hooks"
 import { InvestmentArchiveDialog } from "@/modules/investments/components/archive-dialog"
+import { ConfirmDeleteDialog } from "@/components/shared/confirm-delete-dialog"
 import { useWallets } from "@/modules/expenses/hooks"
 import { useLivePrices } from "@/modules/insights/hooks"
 import { PageHeader } from "@/components/shared/page-header"
@@ -48,6 +49,8 @@ export default function StocksPage() {
   const [addOpen, setAddOpen] = useState(false)
   const [sellOpen, setSellOpen] = useState(false)
   const [archiveOpen, setArchiveOpen] = useState(false)
+  const [deleteStockId, setDeleteStockId] = useState<string | null>(null)
+  const [deleteStockName, setDeleteStockName] = useState("")
   const [mobileSearch, setMobileSearch] = useState("")
   const [selectedSymbol, setSelectedSymbol] = useState("")
   const [selectedWalletId, setSelectedWalletId] = useState("")
@@ -258,11 +261,7 @@ export default function StocksPage() {
           <Button
             variant="ghost"
             size="icon"
-            onClick={() =>
-              deleteStock.mutate(r._holdingId, {
-                onSuccess: () => toast.success("Deleted"),
-              })
-            }
+            onClick={() => { setDeleteStockId(r._holdingId); setDeleteStockName(r.symbol) }}
           >
             <Trash2 className="h-4 w-4" />
           </Button>
@@ -580,7 +579,7 @@ export default function StocksPage() {
                             variant="ghost"
                             size="icon"
                             className="h-7 w-7 shrink-0"
-                            onClick={() => deleteStock.mutate(r._holdingId, { onSuccess: () => toast.success("Deleted") })}
+                            onClick={() => { setDeleteStockId(r._holdingId); setDeleteStockName(r.symbol) }}
                           >
                             <Trash2 className="h-3.5 w-3.5" />
                           </Button>
@@ -637,6 +636,18 @@ export default function StocksPage() {
           </CardContent>
         </Card>
       )}
+      <ConfirmDeleteDialog
+        open={!!deleteStockId}
+        onOpenChange={(v) => { if (!v) setDeleteStockId(null) }}
+        title={`Delete ${deleteStockName}?`}
+        description={`This will permanently delete this stock holding and all its trade history. This cannot be undone.`}
+        note="Any wallet transactions from buying or selling this stock are kept in your expenses ledger — they represent real cash flows. Delete them manually if needed."
+        onConfirm={() => deleteStock.mutate(deleteStockId!, {
+          onSuccess: () => toast.success("Deleted"),
+          onError: (err) => toast.error(err.message),
+        })}
+        isPending={deleteStock.isPending}
+      />
       <InvestmentArchiveDialog
         open={archiveOpen}
         onOpenChange={setArchiveOpen}

@@ -401,14 +401,14 @@ export default function GenerateReportPage() {
                 <CardHeader className="pb-2">
                   <CardTitle className="text-base">Asset Allocation</CardTitle>
                 </CardHeader>
-                <CardContent className="space-y-2">
+                <CardContent className="space-y-4">
                   {[
-                    { label: "Cash & Wallets", value: report.assets.wallets.total },
-                    { label: "Stocks", value: report.assets.stocks.total },
-                    { label: "Commodities", value: report.assets.commodities.total },
-                    { label: "Real Estate", value: report.assets.realEstate.total },
-                    { label: "Side Investments", value: report.assets.sideInvestments.total },
-                    { label: "Receivables", value: report.assets.receivables.total },
+                    { label: "Cash & Wallets",   value: report.assets.wallets.total,         color: "bg-blue-500" },
+                    { label: "Real Estate",       value: report.assets.realEstate.total,      color: "bg-orange-500" },
+                    { label: "Stocks",            value: report.assets.stocks.total,          color: "bg-purple-500" },
+                    { label: "Commodities",       value: report.assets.commodities.total,     color: "bg-yellow-500" },
+                    { label: "Side Investments",  value: report.assets.sideInvestments.total, color: "bg-pink-500" },
+                    { label: "Receivables",       value: report.assets.receivables.total,     color: "bg-emerald-500" },
                   ]
                     .filter((a) => a.value > 0)
                     .map((a) => {
@@ -416,16 +416,21 @@ export default function GenerateReportPage() {
                         ? ((a.value / report.assets.totalAssets) * 100).toFixed(1)
                         : "0.0"
                       return (
-                        <div key={a.label} className="space-y-1">
-                          <div className="flex justify-between text-xs">
-                            <span>{a.label}</span>
-                            <span className="tabular-nums">{pct}% · {formatCurrency(a.value)}</span>
+                        <div key={a.label} className="space-y-1.5">
+                          {/* Row 1: label + amount */}
+                          <div className="flex items-center justify-between gap-2 min-w-0">
+                            <div className="flex items-center gap-2 min-w-0">
+                              <div className={`h-2.5 w-2.5 rounded-full shrink-0 ${a.color}`} />
+                              <span className="text-sm truncate">{a.label}</span>
+                            </div>
+                            <span className="text-sm font-semibold tabular-nums shrink-0">{formatCompact(a.value)}</span>
                           </div>
-                          <div className="h-1.5 bg-muted rounded-full overflow-hidden">
-                            <div
-                              className="h-full bg-primary rounded-full"
-                              style={{ width: `${pct}%` }}
-                            />
+                          {/* Row 2: progress bar + % */}
+                          <div className="flex items-center gap-2 pl-4">
+                            <div className="flex-1 h-1.5 bg-muted rounded-full overflow-hidden">
+                              <div className={`h-full ${a.color} rounded-full`} style={{ width: `${pct}%` }} />
+                            </div>
+                            <span className="text-[11px] text-muted-foreground tabular-nums shrink-0 w-12 text-right">{pct}%</span>
                           </div>
                         </div>
                       )
@@ -443,27 +448,27 @@ export default function GenerateReportPage() {
               </CardTitle>
             </CardHeader>
             <CardContent>
-              <div className="grid gap-4 md:grid-cols-3 mb-6">
-                <div className="rounded-lg bg-green-50 dark:bg-green-950/30 p-4">
-                  <div className="flex items-center gap-2 text-green-700 dark:text-green-400 mb-1">
-                    <TrendingUp className="h-4 w-4" />
+              <div className="grid gap-3 grid-cols-1 sm:grid-cols-3 mb-6">
+                <div className="rounded-lg bg-green-50 dark:bg-green-950/30 p-3 flex items-center justify-between sm:flex-col sm:items-start sm:justify-start sm:gap-1">
+                  <div className="flex items-center gap-2 text-green-700 dark:text-green-400">
+                    <TrendingUp className="h-4 w-4 shrink-0" />
                     <span className="text-sm font-medium">Total Inflow</span>
                   </div>
-                  <p className="text-xl font-bold tabular-nums">{formatCurrency(report.cashFlow.inflow)}</p>
+                  <p className="text-lg font-bold tabular-nums">{formatCompact(report.cashFlow.inflow)}</p>
                 </div>
-                <div className="rounded-lg bg-red-50 dark:bg-red-950/30 p-4">
-                  <div className="flex items-center gap-2 text-red-700 dark:text-red-400 mb-1">
-                    <TrendingDown className="h-4 w-4" />
+                <div className="rounded-lg bg-red-50 dark:bg-red-950/30 p-3 flex items-center justify-between sm:flex-col sm:items-start sm:justify-start sm:gap-1">
+                  <div className="flex items-center gap-2 text-red-700 dark:text-red-400">
+                    <TrendingDown className="h-4 w-4 shrink-0" />
                     <span className="text-sm font-medium">Total Outflow</span>
                   </div>
-                  <p className="text-xl font-bold tabular-nums">{formatCurrency(report.cashFlow.outflow)}</p>
+                  <p className="text-lg font-bold tabular-nums">{formatCompact(report.cashFlow.outflow)}</p>
                 </div>
-                <div className={`rounded-lg p-4 ${report.cashFlow.net >= 0 ? "bg-blue-50 dark:bg-blue-950/30" : "bg-orange-50 dark:bg-orange-950/30"}`}>
-                  <div className={`flex items-center gap-2 mb-1 ${report.cashFlow.net >= 0 ? "text-blue-700 dark:text-blue-400" : "text-orange-700 dark:text-orange-400"}`}>
-                    <Minus className="h-4 w-4" />
+                <div className={`rounded-lg p-3 flex items-center justify-between sm:flex-col sm:items-start sm:justify-start sm:gap-1 ${report.cashFlow.net >= 0 ? "bg-blue-50 dark:bg-blue-950/30" : "bg-orange-50 dark:bg-orange-950/30"}`}>
+                  <div className={`flex items-center gap-2 ${report.cashFlow.net >= 0 ? "text-blue-700 dark:text-blue-400" : "text-orange-700 dark:text-orange-400"}`}>
+                    <Minus className="h-4 w-4 shrink-0" />
                     <span className="text-sm font-medium">Net Cash Flow</span>
                   </div>
-                  <p className="text-xl font-bold tabular-nums">{formatCurrency(report.cashFlow.net)}</p>
+                  <p className="text-lg font-bold tabular-nums">{formatCompact(report.cashFlow.net)}</p>
                 </div>
               </div>
 
@@ -471,15 +476,15 @@ export default function GenerateReportPage() {
                 <div>
                   <p className="text-xs font-semibold text-muted-foreground uppercase tracking-wide mb-3">Breakdown by Category</p>
                   <div className="space-y-1">
-                    <div className="grid grid-cols-3 text-xs font-medium text-muted-foreground pb-1 border-b">
-                      <span>Category</span>
-                      <span className="text-center">Type</span>
-                      <span className="text-right">Amount</span>
+                    <div className="flex items-center text-xs font-medium text-muted-foreground pb-1 border-b gap-2">
+                      <span className="flex-1">Category</span>
+                      <span className="w-14 text-center shrink-0">Type</span>
+                      <span className="w-20 text-right shrink-0">Amount</span>
                     </div>
                     {report.cashFlow.categories.map((c: ReportData, i: number) => (
-                      <div key={i} className="grid grid-cols-3 text-sm py-1.5 border-b border-border/40 last:border-0">
-                        <span>{SUBTYPES[c.name] ?? c.name}</span>
-                        <span className="text-center">
+                      <div key={i} className="flex items-center text-sm py-1.5 border-b border-border/40 last:border-0 gap-2">
+                        <span className="flex-1 truncate">{SUBTYPES[c.name] ?? c.name}</span>
+                        <span className="w-14 text-center shrink-0">
                           <Badge
                             variant={c.type === "inflow" ? "default" : "secondary"}
                             className="text-[10px] py-0"
@@ -487,8 +492,8 @@ export default function GenerateReportPage() {
                             {c.type}
                           </Badge>
                         </span>
-                        <span className={`text-right tabular-nums font-medium ${c.type === "inflow" ? "text-green-600 dark:text-green-400" : "text-red-600 dark:text-red-400"}`}>
-                          {formatCurrency(c.total)}
+                        <span className={`w-20 text-right tabular-nums font-medium shrink-0 ${c.type === "inflow" ? "text-green-600 dark:text-green-400" : "text-red-600 dark:text-red-400"}`}>
+                          {formatCompact(c.total)}
                         </span>
                       </div>
                     ))}

@@ -1,17 +1,18 @@
 import { Card, CardContent } from "@/components/ui/card"
-import { cn } from "@/lib/utils"
+import { cn, formatCompact, formatCurrency } from "@/lib/utils"
 import { type LucideIcon } from "lucide-react"
 
 export interface StatCardGradient {
-  from: string  // e.g. "from-indigo-500/20"
-  to: string    // e.g. "to-violet-500/5"
-  ring: string  // e.g. "ring-indigo-500/30"
-  accent: string // e.g. "text-indigo-500"
+  from: string
+  to: string
+  ring: string
+  accent: string
 }
 
 interface StatCardProps {
   title: string
   value: string
+  numericValue?: number   // when provided, shows compact big + full small in gradient mode
   subtitle?: string
   icon: LucideIcon
   trend?: { value: number; label: string }
@@ -19,8 +20,11 @@ interface StatCardProps {
   gradient?: StatCardGradient
 }
 
-export function StatCard({ title, value, subtitle, icon: Icon, trend, className, gradient }: StatCardProps) {
+export function StatCard({ title, value, numericValue, subtitle, icon: Icon, trend, className, gradient }: StatCardProps) {
   if (gradient) {
+    const displayValue = numericValue !== undefined ? formatCompact(numericValue) : value
+    const fullValue    = numericValue !== undefined ? formatCurrency(numericValue) : null
+
     return (
       <div className={cn(
         "relative overflow-hidden rounded-xl border bg-gradient-to-br p-3 sm:p-4 ring-1",
@@ -30,8 +34,16 @@ export function StatCard({ title, value, subtitle, icon: Icon, trend, className,
         <div className="flex items-start justify-between gap-2">
           <div className="min-w-0 flex-1">
             <p className="text-[10px] sm:text-xs uppercase tracking-wide text-muted-foreground font-medium">{title}</p>
-            <p className="text-xl sm:text-2xl font-bold tabular-nums truncate mt-0.5">{value}</p>
-            {subtitle && <p className="text-[10px] sm:text-xs text-muted-foreground mt-0.5 truncate">{subtitle}</p>}
+            <p className="text-xl sm:text-2xl font-bold tabular-nums truncate mt-0.5">{displayValue}</p>
+            {fullValue && (
+              <p className="text-[10px] sm:text-xs text-muted-foreground/70 tabular-nums mt-0.5 truncate">{fullValue}</p>
+            )}
+            {subtitle && !fullValue && (
+              <p className="text-[10px] sm:text-xs text-muted-foreground mt-0.5 truncate">{subtitle}</p>
+            )}
+            {subtitle && fullValue && (
+              <p className="text-[10px] sm:text-xs text-muted-foreground mt-0.5 truncate">{subtitle}</p>
+            )}
             {trend && (
               <p className={cn("text-[10px] sm:text-xs font-medium mt-0.5", trend.value >= 0 ? "text-emerald-500" : "text-red-500")}>
                 {trend.value >= 0 ? "+" : ""}{trend.value}% {trend.label}

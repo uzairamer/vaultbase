@@ -249,3 +249,52 @@ export function useDeleteSideInvestment() {
     onSuccess: () => qc.invalidateQueries({ queryKey: ["side-investments"] }),
   })
 }
+
+// Static Prices
+export function useStaticPrices() {
+  return useQuery({ queryKey: ["static-prices"], queryFn: () => fetcher("/api/settings/static-prices") })
+}
+
+export function useCreateStaticPrice() {
+  const qc = useQueryClient()
+  return useMutation({
+    mutationFn: (name: string) => mutator("/api/settings/static-prices", { method: "POST", body: JSON.stringify({ name }) }),
+    onSuccess: () => qc.invalidateQueries({ queryKey: ["static-prices"] }),
+  })
+}
+
+export function useDeleteStaticPrice() {
+  const qc = useQueryClient()
+  return useMutation({
+    mutationFn: (id: string) => mutator(`/api/settings/static-prices?id=${id}`, { method: "DELETE" }),
+    onSuccess: () => {
+      qc.invalidateQueries({ queryKey: ["static-prices"] })
+      qc.invalidateQueries({ queryKey: ["commodities"] })
+    },
+  })
+}
+
+export function useAddStaticPriceEntry() {
+  const qc = useQueryClient()
+  return useMutation({
+    mutationFn: (data: { staticPriceId: string; pricePerTola: number; date: string; note?: string }) =>
+      mutator("/api/settings/static-prices/entries", { method: "POST", body: JSON.stringify(data) }),
+    onSuccess: () => {
+      qc.invalidateQueries({ queryKey: ["static-prices"] })
+      qc.invalidateQueries({ queryKey: ["commodities"] })
+      qc.invalidateQueries({ queryKey: ["insights"] })
+    },
+  })
+}
+
+export function useDeleteStaticPriceEntry() {
+  const qc = useQueryClient()
+  return useMutation({
+    mutationFn: (id: string) => mutator(`/api/settings/static-prices/entries?id=${id}`, { method: "DELETE" }),
+    onSuccess: () => {
+      qc.invalidateQueries({ queryKey: ["static-prices"] })
+      qc.invalidateQueries({ queryKey: ["commodities"] })
+      qc.invalidateQueries({ queryKey: ["insights"] })
+    },
+  })
+}

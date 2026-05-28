@@ -137,34 +137,28 @@ export default function GenerateReportPage() {
           </div>
 
           {/* ── Net Worth Summary ─────────────────────────────────── */}
-          <div className="grid gap-4 md:grid-cols-3">
-            <Card className="md:col-span-1 bg-primary text-primary-foreground">
-              <CardContent className="pt-6">
-                <p className="text-sm font-medium opacity-80">Net Worth</p>
-                <p className="text-3xl font-bold mt-1 tabular-nums">{formatCurrency(report.netWorth)}</p>
-                <p className="text-xs opacity-70 mt-2">As of end of {report.period.label}</p>
-              </CardContent>
-            </Card>
-            <Card>
-              <CardContent className="pt-6">
-                <div className="flex items-center gap-2 text-green-600 dark:text-green-400">
-                  <TrendingUp className="h-4 w-4" />
-                  <p className="text-sm font-medium">Total Assets</p>
-                </div>
-                <p className="text-2xl font-bold mt-1 tabular-nums">{formatCurrency(report.assets.totalAssets)}</p>
-                <p className="text-xs text-muted-foreground mt-1">Across all asset classes</p>
-              </CardContent>
-            </Card>
-            <Card>
-              <CardContent className="pt-6">
-                <div className="flex items-center gap-2 text-red-600 dark:text-red-400">
-                  <TrendingDown className="h-4 w-4" />
-                  <p className="text-sm font-medium">Total Liabilities</p>
-                </div>
-                <p className="text-2xl font-bold mt-1 tabular-nums">{formatCurrency(report.liabilities.total)}</p>
-                <p className="text-xs text-muted-foreground mt-1">Outstanding debts</p>
-              </CardContent>
-            </Card>
+          <div className="grid gap-2 sm:gap-3 grid-cols-1 md:grid-cols-3">
+            <div className="relative overflow-hidden rounded-xl border bg-gradient-to-br from-indigo-500/25 to-violet-500/5 p-4 ring-1 ring-indigo-500/40">
+              <p className="text-xs uppercase tracking-wide text-muted-foreground font-medium">Net Worth</p>
+              <p className="text-2xl sm:text-3xl font-bold tabular-nums mt-1">{formatCurrency(report.netWorth)}</p>
+              <p className="text-xs text-muted-foreground mt-1.5">As of end of {report.period.label}</p>
+            </div>
+            <div className="relative overflow-hidden rounded-xl border bg-gradient-to-br from-emerald-500/25 to-teal-500/5 p-4 ring-1 ring-emerald-500/40">
+              <div className="flex items-center gap-1.5 text-emerald-400">
+                <TrendingUp className="h-4 w-4" />
+                <p className="text-xs uppercase tracking-wide font-medium">Total Assets</p>
+              </div>
+              <p className="text-2xl font-bold mt-1 tabular-nums">{formatCurrency(report.assets.totalAssets)}</p>
+              <p className="text-xs text-muted-foreground mt-1">Across all asset classes</p>
+            </div>
+            <div className="relative overflow-hidden rounded-xl border bg-gradient-to-br from-red-500/25 to-rose-500/5 p-4 ring-1 ring-red-500/40">
+              <div className="flex items-center gap-1.5 text-red-400">
+                <TrendingDown className="h-4 w-4" />
+                <p className="text-xs uppercase tracking-wide font-medium">Total Liabilities</p>
+              </div>
+              <p className="text-2xl font-bold mt-1 tabular-nums">{formatCurrency(report.liabilities.total)}</p>
+              <p className="text-xs text-muted-foreground mt-1">Outstanding debts</p>
+            </div>
           </div>
 
           {/* ── Assets & Liabilities ──────────────────────────────── */}
@@ -226,6 +220,9 @@ export default function GenerateReportPage() {
                         sub={p.location ?? undefined}
                       />
                     ))}
+                    <p className="text-[10px] text-muted-foreground italic mt-1.5">
+                      Properties shown at full market value (current estimate or purchase price). Remaining installments appear on the liability side — standard balance-sheet treatment.
+                    </p>
                   </SectionCard>
                 )}
 
@@ -269,10 +266,17 @@ export default function GenerateReportPage() {
                 <CardHeader className="pb-2">
                   <CardTitle className="text-base">Liabilities</CardTitle>
                 </CardHeader>
-                <CardContent>
-                  <SectionCard title="Outstanding Debts" icon={HandCoins} total={report.liabilities.total} totalLabel="Total Liabilities">
+                <CardContent className="space-y-5">
+
+                  {/* Personal debts (loans from people) */}
+                  <SectionCard
+                    title="Personal Debts"
+                    icon={HandCoins}
+                    total={report.liabilities.items.reduce((s: number, l: ReportData) => s + l.remaining, 0)}
+                    totalLabel="Subtotal — Personal"
+                  >
                     {report.liabilities.items.length === 0
-                      ? <p className="text-xs text-muted-foreground py-2">No outstanding liabilities</p>
+                      ? <p className="text-xs text-muted-foreground py-2">No personal debts</p>
                       : report.liabilities.items.map((l: ReportData) => (
                         <div key={l.id} className="flex items-baseline justify-between py-1.5">
                           <div className="flex items-center gap-2">
@@ -286,6 +290,39 @@ export default function GenerateReportPage() {
                       ))
                     }
                   </SectionCard>
+
+                  {/* Real Estate obligations — pending + overdue installments per property */}
+                  {report.liabilities.realEstateDebt && report.liabilities.realEstateDebt.total > 0 && (
+                    <SectionCard
+                      title="Real Estate Obligations"
+                      icon={Building2}
+                      total={report.liabilities.realEstateDebt.total}
+                      totalLabel="Subtotal — Real Estate"
+                    >
+                      {report.liabilities.realEstateDebt.items.map((d: ReportData) => (
+                        <div key={d.propertyId} className="py-1.5 space-y-0.5">
+                          <div className="flex items-baseline justify-between">
+                            <span className="text-sm">{d.name}</span>
+                            <span className="text-sm font-medium tabular-nums text-red-600 dark:text-red-400">
+                              {formatCurrency(d.remaining)}
+                            </span>
+                          </div>
+                          <div className="flex items-center gap-3 text-[11px] text-muted-foreground tabular-nums">
+                            {d.pending > 0 && <span>Pending future: <span className="text-foreground">{formatCurrency(d.pending)}</span></span>}
+                            {d.unpaid > 0 && <span>Overdue: <span className="text-red-500">{formatCurrency(d.unpaid)}</span></span>}
+                          </div>
+                        </div>
+                      ))}
+                    </SectionCard>
+                  )}
+
+                  {/* Grand total */}
+                  <div className="flex justify-between pt-2 border-t-2 border-foreground">
+                    <span className="font-bold">Total Liabilities</span>
+                    <span className="font-bold tabular-nums text-red-600 dark:text-red-400">
+                      {formatCurrency(report.liabilities.total)}
+                    </span>
+                  </div>
                 </CardContent>
               </Card>
 
@@ -294,17 +331,27 @@ export default function GenerateReportPage() {
                 <CardHeader className="pb-2">
                   <CardTitle className="text-base">Owner&apos;s Equity</CardTitle>
                 </CardHeader>
-                <CardContent className="space-y-3">
+                <CardContent className="space-y-1.5">
                   <div className="flex justify-between py-1.5">
                     <span className="text-sm">Total Assets</span>
                     <span className="text-sm tabular-nums">{formatCurrency(report.assets.totalAssets)}</span>
                   </div>
-                  <div className="flex justify-between py-1.5">
-                    <span className="text-sm">Less: Total Liabilities</span>
-                    <span className="text-sm tabular-nums text-red-600 dark:text-red-400">
-                      ({formatCurrency(report.liabilities.total)})
-                    </span>
-                  </div>
+                  {report.liabilities.items.reduce((s: number, l: ReportData) => s + l.remaining, 0) > 0 && (
+                    <div className="flex justify-between py-1.5">
+                      <span className="text-sm pl-3">Less: Personal Debts</span>
+                      <span className="text-sm tabular-nums text-red-600 dark:text-red-400">
+                        ({formatCurrency(report.liabilities.items.reduce((s: number, l: ReportData) => s + l.remaining, 0))})
+                      </span>
+                    </div>
+                  )}
+                  {report.liabilities.realEstateDebt && report.liabilities.realEstateDebt.total > 0 && (
+                    <div className="flex justify-between py-1.5">
+                      <span className="text-sm pl-3">Less: Real Estate Obligations</span>
+                      <span className="text-sm tabular-nums text-red-600 dark:text-red-400">
+                        ({formatCurrency(report.liabilities.realEstateDebt.total)})
+                      </span>
+                    </div>
+                  )}
                   <Separator />
                   <div className="flex justify-between py-1.5 font-bold">
                     <span>Net Worth</span>

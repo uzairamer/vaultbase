@@ -13,7 +13,7 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@
 import { EmptyState } from "@/components/shared/empty-state"
 import { Plus, Briefcase, Trash2 } from "lucide-react"
 import { Badge } from "@/components/ui/badge"
-import { formatCurrency, formatPercent } from "@/lib/utils"
+import { cn, formatCurrency, formatPercent } from "@/lib/utils"
 import { SIDE_INVESTMENT_TYPES } from "@/lib/constants"
 import { format } from "date-fns"
 import { toast } from "sonner"
@@ -103,41 +103,46 @@ export default function OtherInvestmentsPage() {
       {(investments as Record<string, unknown>[]).length === 0 ? (
         <EmptyState icon={Briefcase} title="No side investments" description="Track crypto, lending, business ventures, etc." />
       ) : (
-        <div className="grid gap-4 md:grid-cols-2 lg:grid-cols-3">
+        <div className="grid gap-2 sm:gap-3 grid-cols-1 sm:grid-cols-2 lg:grid-cols-3">
           {(investments as Record<string, unknown>[]).map((inv) => {
             const invested = Number(inv.investedAmount)
             const current = Number(inv.currentValue)
             const pnl = current - invested
             const pnlPct = invested > 0 ? (pnl / invested) * 100 : 0
             return (
-              <Card key={inv.id as string}>
-                <CardHeader className="flex flex-row items-center justify-between pb-2">
-                  <CardTitle className="text-base">{inv.name as string}</CardTitle>
-                  <div className="flex items-center gap-1">
-                    <Badge variant={inv.status === "active" ? "default" : "secondary"}>
+              <div
+                key={inv.id as string}
+                className={cn(
+                  "relative overflow-hidden rounded-xl border bg-gradient-to-br from-pink-500/25 to-rose-500/5 p-4 ring-1 ring-pink-500/40 hover:ring-2 hover:ring-pink-400/70 transition-all h-full",
+                )}
+              >
+                <div className="flex items-start justify-between gap-2 mb-2">
+                  <div className="min-w-0 flex-1">
+                    <p className="text-base font-semibold truncate">{inv.name as string}</p>
+                    <p className="text-xs text-muted-foreground mt-0.5">
+                      {(SIDE_INVESTMENT_TYPES.find((t) => t.value === inv.type) || { label: inv.type }).label as string}
+                      {" · "}Started {format(new Date(inv.startDate as string), "MMM yyyy")}
+                    </p>
+                  </div>
+                  <div className="flex items-center gap-1 shrink-0">
+                    <Badge variant="outline" className="bg-pink-500/10 border-pink-500/40 text-pink-300 text-[10px] h-5">
                       {inv.status as string}
                     </Badge>
-                    <Button variant="ghost" size="icon" className="h-8 w-8" onClick={() => {
+                    <Button variant="ghost" size="icon" className="h-7 w-7" onClick={() => {
                       deleteInv.mutate(inv.id as string, { onSuccess: () => toast.success("Deleted") })
                     }}>
                       <Trash2 className="h-3.5 w-3.5" />
                     </Button>
                   </div>
-                </CardHeader>
-                <CardContent className="space-y-2">
-                  <div className="text-2xl font-bold">{formatCurrency(current)}</div>
-                  <div className="flex justify-between text-sm">
-                    <span className="text-muted-foreground">Invested: {formatCurrency(invested)}</span>
-                    <span className={pnl >= 0 ? "text-green-500" : "text-red-500"}>
-                      {formatCurrency(pnl)} ({formatPercent(pnlPct)})
-                    </span>
-                  </div>
-                  <p className="text-xs text-muted-foreground">
-                    {(SIDE_INVESTMENT_TYPES.find((t) => t.value === inv.type) || { label: inv.type }).label as string}
-                    {" · "}Started {format(new Date(inv.startDate as string), "MMM yyyy")}
-                  </p>
-                </CardContent>
-              </Card>
+                </div>
+                <p className="text-2xl font-bold tabular-nums">{formatCurrency(current)}</p>
+                <div className="flex items-center justify-between text-sm mt-1.5 tabular-nums">
+                  <span className="text-muted-foreground">Invested {formatCurrency(invested)}</span>
+                  <span className={cn("font-medium", pnl >= 0 ? "text-emerald-400" : "text-red-400")}>
+                    {pnl >= 0 ? "+" : ""}{formatCurrency(pnl)} ({formatPercent(pnlPct)})
+                  </span>
+                </div>
+              </div>
             )
           })}
         </div>

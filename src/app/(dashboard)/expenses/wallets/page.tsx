@@ -848,32 +848,32 @@ export default function WalletsPage() {
                     <Button
                       size="sm"
                       variant="ghost"
-                      className="flex-1 text-xs text-muted-foreground h-7"
+                      className="flex-1 min-w-0 text-xs text-muted-foreground h-7 px-1.5"
                       onClick={() => setSegmentsWalletId(wallet.id as string)}
                     >
-                      <LayoutGrid className="h-3 w-3 mr-1.5" />
-                      Manage Segments
+                      <LayoutGrid className="h-3 w-3 mr-1 shrink-0" />
+                      <span className="truncate">Segments</span>
                     </Button>
                     <Button
                       size="sm"
                       variant="ghost"
-                      className="flex-1 text-xs text-amber-600 dark:text-amber-400 h-7 hover:bg-amber-50 dark:hover:bg-amber-950/30"
+                      className="flex-1 min-w-0 text-xs text-amber-600 dark:text-amber-400 h-7 px-1.5 hover:bg-amber-50 dark:hover:bg-amber-950/30"
                       onClick={() => {
                         setReconcileWalletId(wallet.id as string)
                         setActualBalance(String(balance))
                       }}
                     >
-                      <Scale className="h-3 w-3 mr-1.5" />
-                      Reconcile
+                      <Scale className="h-3 w-3 mr-1 shrink-0" />
+                      <span className="truncate">Reconcile</span>
                     </Button>
                     <Button
                       size="sm"
                       variant="ghost"
-                      className="flex-1 text-xs text-orange-600 dark:text-orange-400 h-7 hover:bg-orange-50 dark:hover:bg-orange-950/30"
+                      className="flex-1 min-w-0 text-xs text-orange-600 dark:text-orange-400 h-7 px-1.5 hover:bg-orange-50 dark:hover:bg-orange-950/30"
                       onClick={() => { setArchiveWalletId(wallet.id as string); setArchiveConfirmInput("") }}
                     >
-                      <Archive className="h-3 w-3 mr-1.5" />
-                      Archive
+                      <Archive className="h-3 w-3 mr-1 shrink-0" />
+                      <span className="truncate">Archive</span>
                     </Button>
                   </div>
                 </div>

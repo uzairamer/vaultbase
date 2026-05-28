@@ -80,7 +80,13 @@ export default function DashboardPage() {
   const commoditiesValue = commodities.reduce((sum, c) => sum + Number(c.quantity) * Number(c.currentPrice ?? c.avgBuyPrice), 0)
   const sideValue = sideInvestments.filter((s) => s.status === "active").reduce((sum, s) => sum + Number(s.currentValue), 0)
   const receivablesTotal = receivables.filter((r) => r.status !== "settled").reduce((sum, r) => sum + Number(r.amount) - Number(r.amountPaid), 0)
-  const liabilitiesTotal = liabilities.filter((l) => l.status !== "settled").reduce((sum, l) => sum + Number(l.amount) - Number(l.amountPaid), 0)
+  const personalLiabilitiesTotal = liabilities.filter((l) => l.status !== "settled").reduce((sum, l) => sum + Number(l.amount) - Number(l.amountPaid), 0)
+  // Real-estate contractual debt: all remaining (pending + unpaid) installments across properties
+  const realEstateDebtTotal = properties.reduce((sum, p) => {
+    const insts = (p.installments as Record<string, unknown>[]) || []
+    return sum + insts.filter((i) => i.status === "pending" || i.status === "unpaid").reduce((s, i) => s + Number(i.amount), 0)
+  }, 0)
+  const liabilitiesTotal = personalLiabilitiesTotal + realEstateDebtTotal
 
   const totalAssets = walletBalance + realEstateValue + stocksValue + commoditiesValue + sideValue + receivablesTotal
   const netWorth = totalAssets - liabilitiesTotal
@@ -122,12 +128,12 @@ export default function DashboardPage() {
         description={`Welcome back, ${session?.user?.name || "there"}!`}
       />
 
-      <div className="grid gap-4 md:grid-cols-2 lg:grid-cols-4 mb-8">
+      <div className="grid gap-2 sm:gap-3 grid-cols-2 lg:grid-cols-4 mb-8">
         <StatCard
           title="Net Worth"
           value={formatCurrency(animNetWorth)}
           icon={DollarSign}
-          className="border-primary/20"
+          gradient={{ from: "from-indigo-500/25", to: "to-violet-500/5", ring: "ring-indigo-500/40", accent: "text-indigo-400" }}
         />
         <button className="text-left" onClick={() => setLedgerFilter("all")}>
           <StatCard
@@ -135,7 +141,8 @@ export default function DashboardPage() {
             value={formatCurrency(animWalletBalance)}
             subtitle={`${wallets.length} wallet(s)`}
             icon={Wallet}
-            className={ledgerFilter === "all" ? "ring-2 ring-primary" : "hover:ring-1 hover:ring-primary/50 transition-shadow"}
+            gradient={{ from: "from-sky-500/25", to: "to-blue-500/5", ring: "ring-sky-500/40", accent: "text-sky-400" }}
+            className={ledgerFilter === "all" ? "ring-2 ring-sky-400" : "hover:ring-2 hover:ring-sky-400/60 transition-all"}
           />
         </button>
         <button className="text-left" onClick={() => setLedgerFilter(ledgerFilter === "receivable_collection" ? "all" : "receivable_collection")}>
@@ -144,7 +151,8 @@ export default function DashboardPage() {
             value={formatCurrency(animReceivablesTotal)}
             subtitle={`${receivables.filter((r) => r.status !== "settled").length} active`}
             icon={TrendingUp}
-            className={ledgerFilter === "receivable_collection" ? "ring-2 ring-green-500" : "hover:ring-1 hover:ring-green-500/50 transition-shadow cursor-pointer"}
+            gradient={{ from: "from-emerald-500/25", to: "to-teal-500/5", ring: "ring-emerald-500/40", accent: "text-emerald-400" }}
+            className={ledgerFilter === "receivable_collection" ? "ring-2 ring-emerald-400" : "hover:ring-2 hover:ring-emerald-400/60 transition-all cursor-pointer"}
           />
         </button>
         <button className="text-left" onClick={() => setLedgerFilter(ledgerFilter === "lending" ? "all" : "lending")}>
@@ -153,17 +161,42 @@ export default function DashboardPage() {
             value={formatCurrency(animLiabilitiesTotal)}
             subtitle={`${liabilities.filter((l) => l.status !== "settled").length} active`}
             icon={TrendingDown}
-            className={ledgerFilter === "lending" ? "ring-2 ring-red-500" : "hover:ring-1 hover:ring-red-500/50 transition-shadow cursor-pointer"}
+            gradient={{ from: "from-red-500/25", to: "to-rose-500/5", ring: "ring-red-500/40", accent: "text-red-400" }}
+            className={ledgerFilter === "lending" ? "ring-2 ring-red-400" : "hover:ring-2 hover:ring-red-400/60 transition-all cursor-pointer"}
           />
         </button>
       </div>
 
       <h2 className="text-xl font-semibold mb-4">Investment Breakdown</h2>
-      <div className="grid gap-4 md:grid-cols-2 lg:grid-cols-4 mb-8">
-        <StatCard title="Real Estate" value={formatCurrency(animRealEstateValue)} subtitle={`${properties.length} properties`} icon={Building2} />
-        <StatCard title="Stocks" value={formatCurrency(animStocksValue)} subtitle={`${stocks.length} holdings`} icon={BarChart3} />
-        <StatCard title="Commodities" value={formatCurrency(animCommoditiesValue)} subtitle={`${commodities.length} holdings`} icon={Gem} />
-        <StatCard title="Side Investments" value={formatCurrency(animSideValue)} subtitle={`${sideInvestments.filter((s) => s.status === "active").length} active`} icon={Briefcase} />
+      <div className="grid gap-2 sm:gap-3 grid-cols-2 lg:grid-cols-4 mb-8">
+        <StatCard
+          title="Real Estate"
+          value={formatCurrency(animRealEstateValue)}
+          subtitle={`${properties.length} properties`}
+          icon={Building2}
+          gradient={{ from: "from-orange-500/25", to: "to-red-500/5", ring: "ring-orange-500/40", accent: "text-orange-400" }}
+        />
+        <StatCard
+          title="Stocks"
+          value={formatCurrency(animStocksValue)}
+          subtitle={`${stocks.length} holdings`}
+          icon={BarChart3}
+          gradient={{ from: "from-purple-500/25", to: "to-fuchsia-500/5", ring: "ring-purple-500/40", accent: "text-purple-400" }}
+        />
+        <StatCard
+          title="Commodities"
+          value={formatCurrency(animCommoditiesValue)}
+          subtitle={`${commodities.length} holdings`}
+          icon={Gem}
+          gradient={{ from: "from-yellow-500/25", to: "to-amber-500/5", ring: "ring-yellow-500/40", accent: "text-yellow-400" }}
+        />
+        <StatCard
+          title="Side Investments"
+          value={formatCurrency(animSideValue)}
+          subtitle={`${sideInvestments.filter((s) => s.status === "active").length} active`}
+          icon={Briefcase}
+          gradient={{ from: "from-pink-500/25", to: "to-rose-500/5", ring: "ring-pink-500/40", accent: "text-pink-400" }}
+        />
       </div>
 
       {/* Transactions Ledger */}

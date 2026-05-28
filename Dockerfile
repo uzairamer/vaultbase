@@ -12,7 +12,7 @@ RUN npm ci
 FROM base AS dev
 COPY --from=deps /app/node_modules ./node_modules
 COPY . .
-RUN npx prisma generate
+RUN ./node_modules/.bin/prisma generate
 EXPOSE 3000
 CMD ["npm", "run", "dev"]
 
@@ -20,7 +20,7 @@ CMD ["npm", "run", "dev"]
 FROM base AS build
 COPY --from=deps /app/node_modules ./node_modules
 COPY . .
-RUN npx prisma generate
+RUN ./node_modules/.bin/prisma generate
 # NEXTAUTH_SECRET must be present at build time for Next.js/NextAuth to compile
 ARG NEXTAUTH_SECRET=build-time-placeholder
 ENV NEXTAUTH_SECRET=$NEXTAUTH_SECRET

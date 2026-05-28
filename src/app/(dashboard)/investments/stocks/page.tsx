@@ -16,7 +16,7 @@ import { EmptyState } from "@/components/shared/empty-state"
 import { DataTable } from "@/components/shared/data-table"
 import { Badge } from "@/components/ui/badge"
 import { Plus, BarChart3, Trash2, TrendingDown, Archive } from "lucide-react"
-import { formatCurrency, formatPercent } from "@/lib/utils"
+import { cn, formatCurrency, formatPercent } from "@/lib/utils"
 import { type ColumnDef } from "@tanstack/react-table"
 import { format } from "date-fns"
 import { toast } from "sonner"
@@ -48,6 +48,7 @@ export default function StocksPage() {
   const [addOpen, setAddOpen] = useState(false)
   const [sellOpen, setSellOpen] = useState(false)
   const [archiveOpen, setArchiveOpen] = useState(false)
+  const [mobileSearch, setMobileSearch] = useState("")
   const [selectedSymbol, setSelectedSymbol] = useState("")
   const [selectedWalletId, setSelectedWalletId] = useState("")
   const [addWalletId, setAddWalletId] = useState("")
@@ -495,12 +496,134 @@ export default function StocksPage() {
             </CardTitle>
           </CardHeader>
           <CardContent className="p-4 pt-0">
-            <DataTable
-              columns={columns}
-              data={unifiedData}
-              searchKey="symbol"
-              searchPlaceholder="Search by symbol..."
-            />
+            {/* Desktop / tablet: full table */}
+            <div className="hidden sm:block">
+              <DataTable
+                columns={columns}
+                data={unifiedData}
+                searchKey="symbol"
+                searchPlaceholder="Search by symbol..."
+              />
+            </div>
+            {/* Mobile: card list */}
+            <div className="sm:hidden space-y-2">
+              <Input
+                placeholder="Search by symbol..."
+                value={mobileSearch}
+                onChange={(e) => setMobileSearch(e.target.value)}
+                className="h-9 text-sm"
+              />
+              {(() => {
+                const q = mobileSearch.trim().toLowerCase()
+                const filtered = q
+                  ? unifiedData.filter((r) =>
+                      r.symbol.toLowerCase().includes(q) || r.name.toLowerCase().includes(q),
+                    )
+                  : unifiedData
+                if (filtered.length === 0) {
+                  return <p className="text-center text-xs text-muted-foreground py-6">No transactions</p>
+                }
+                return filtered.map((r) => {
+                  const isBuy = r._kind === "buy"
+                  const live = livePriceMap.get(r.symbol)
+                  let pnl = 0
+                  let pct = 0
+                  if (isBuy) {
+                    const cur = live ?? r.avgBuyPrice
+                    pnl = (cur - r.avgBuyPrice) * r.qty
+                    pct = r.avgBuyPrice > 0 ? ((cur - r.avgBuyPrice) / r.avgBuyPrice) * 100 : 0
+                  } else {
+                    pnl = (r.sellPrice - r.lotAvgBuyPrice) * r.qty - r.fee
+                  }
+                  return (
+                    <div
+                      key={`${r._kind}-${r.id}`}
+                      className={cn(
+                        "rounded-lg border p-3",
+                        isBuy ? "border-emerald-500/20 bg-emerald-500/[0.03]" : "border-red-500/20 bg-red-500/[0.03]",
+                      )}
+                    >
+                      {/* Header row: symbol, type badge, date, delete */}
+                      <div className="flex items-start justify-between gap-2 mb-1.5">
+                        <div className="min-w-0 flex-1">
+                          <div className="flex items-center gap-1.5 mb-0.5">
+                            {isBuy ? (
+                              <Badge variant="outline" className="text-emerald-500 border-emerald-500/40 bg-emerald-500/10 text-[10px] h-4 px-1.5">Buy</Badge>
+                            ) : (
+                              <Badge variant="outline" className="text-red-500 border-red-500/40 bg-red-500/10 text-[10px] h-4 px-1.5">Sell</Badge>
+                            )}
+                            <span className="text-[10px] text-muted-foreground tabular-nums">
+                              {format(new Date(r.date), "MMM dd, yyyy")}
+                            </span>
+                          </div>
+                          {isBuy ? (
+                            <Link href={`/investments/stocks/${r._holdingId}`} className="text-sm font-semibold text-primary hover:underline">
+                              {r.symbol}
+                            </Link>
+                          ) : (
+                            <span className="text-sm font-semibold">{r.symbol}</span>
+                          )}
+                          <span className="text-xs text-muted-foreground ml-1.5 truncate">{r.name}</span>
+                        </div>
+                        {isBuy && (
+                          <Button
+                            variant="ghost"
+                            size="icon"
+                            className="h-7 w-7 shrink-0"
+                            onClick={() => deleteStock.mutate(r._holdingId, { onSuccess: () => toast.success("Deleted") })}
+                          >
+                            <Trash2 className="h-3.5 w-3.5" />
+                          </Button>
+                        )}
+                      </div>
+
+                      {/* Stats grid */}
+                      <div className="grid grid-cols-3 gap-2 text-xs">
+                        <div>
+                          <p className="text-[10px] uppercase tracking-wide text-muted-foreground">Qty</p>
+                          <p className="font-medium tabular-nums">
+                            {r.qty.toFixed(2)}
+                            {isBuy && r.soldQty > 0 && (
+                              <span className="text-[9px] text-muted-foreground"> / {r.buyQty.toFixed(2)}</span>
+                            )}
+                          </p>
+                        </div>
+                        <div>
+                          <p className="text-[10px] uppercase tracking-wide text-muted-foreground">
+                            {isBuy ? "Avg Buy" : "Sell Price"}
+                          </p>
+                          <p className="font-medium tabular-nums">
+                            {formatCurrency(isBuy ? r.avgBuyPrice : r.sellPrice)}
+                          </p>
+                        </div>
+                        <div>
+                          <p className="text-[10px] uppercase tracking-wide text-muted-foreground">
+                            {isBuy ? "Live" : "Fee"}
+                          </p>
+                          <p className="font-medium tabular-nums">
+                            {isBuy
+                              ? (live ? formatCurrency(live) : "—")
+                              : formatCurrency(r.fee)}
+                          </p>
+                        </div>
+                      </div>
+
+                      {/* P&L footer */}
+                      <div className="mt-2 pt-2 border-t border-border/40 flex items-center justify-between">
+                        <span className="text-[10px] uppercase tracking-wide text-muted-foreground">P&amp;L</span>
+                        <span className={cn(
+                          "text-sm font-semibold tabular-nums",
+                          pnl >= 0 ? "text-emerald-500" : "text-red-500",
+                        )}>
+                          {pnl >= 0 ? "+" : ""}{formatCurrency(pnl)}
+                          {isBuy && <span className="text-[10px] ml-1 opacity-80">({formatPercent(pct)})</span>}
+                        </span>
+                      </div>
+                    </div>
+                  )
+                })
+              })()}
+            </div>
           </CardContent>
         </Card>
       )}

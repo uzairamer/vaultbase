@@ -11,7 +11,7 @@ import { Label } from "@/components/ui/label"
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select"
 import { EmptyState } from "@/components/shared/empty-state"
 import { Plus, Receipt, Trash2, ArrowDownLeft, ArrowUpRight, X, Filter } from "lucide-react"
-import { formatCurrency } from "@/lib/utils"
+import { cn, formatCurrency } from "@/lib/utils"
 import { format } from "date-fns"
 import { Badge } from "@/components/ui/badge"
 import { toast } from "sonner"
@@ -251,30 +251,43 @@ export default function ExpensesPage() {
       ) : (
         <div className="space-y-4">
           {/* Summary cards */}
-          <div className="grid gap-4 grid-cols-3">
-            <Card className="cursor-pointer transition-shadow hover:ring-1 hover:ring-primary/50" onClick={() => setFilterType(filterType === "all" ? "all" : "all")}>
-              <CardContent className="p-3 sm:p-4">
-                <p className="text-xs text-muted-foreground">Net</p>
-                <p className={`text-sm sm:text-lg font-bold leading-tight truncate ${totalInflow - totalOutflow >= 0 ? "text-green-600" : "text-red-600"}`}>
-                  {totalInflow - totalOutflow >= 0 ? "+" : ""}{formatCurrency(totalInflow - totalOutflow)}
-                </p>
-                <p className="text-xs text-muted-foreground">{filtered.length} transactions</p>
-              </CardContent>
-            </Card>
-            <Card className={`cursor-pointer transition-shadow ${filterType === "inflow" ? "ring-2 ring-green-500" : "hover:ring-1 hover:ring-green-500/50"}`} onClick={() => setFilterType(filterType === "inflow" ? "all" : "inflow")}>
-              <CardContent className="p-3 sm:p-4">
-                <p className="text-xs text-muted-foreground">Total Inflow</p>
-                <p className="text-sm sm:text-lg font-bold text-green-600 leading-tight truncate">+{formatCurrency(totalInflow)}</p>
-                <p className="text-xs text-muted-foreground">{cashFiltered.filter((t) => t.type === "inflow").length} transactions</p>
-              </CardContent>
-            </Card>
-            <Card className={`cursor-pointer transition-shadow ${filterType === "outflow" ? "ring-2 ring-red-500" : "hover:ring-1 hover:ring-red-500/50"}`} onClick={() => setFilterType(filterType === "outflow" ? "all" : "outflow")}>
-              <CardContent className="p-3 sm:p-4">
-                <p className="text-xs text-muted-foreground">Total Outflow</p>
-                <p className="text-sm sm:text-lg font-bold text-red-600 leading-tight truncate">-{formatCurrency(totalOutflow)}</p>
-                <p className="text-xs text-muted-foreground">{cashFiltered.filter((t) => t.type === "outflow").length} transactions</p>
-              </CardContent>
-            </Card>
+          <div className="grid gap-2 sm:gap-3 grid-cols-3">
+            {(() => {
+              const net = totalInflow - totalOutflow
+              const netPositive = net >= 0
+              const netGrad = netPositive
+                ? { from: "from-emerald-500/25", to: "to-teal-500/5", ring: "ring-emerald-500/40", accent: "text-emerald-400" }
+                : { from: "from-red-500/25", to: "to-rose-500/5", ring: "ring-red-500/40", accent: "text-red-400" }
+              return (
+                <button onClick={() => setFilterType("all")} className={cn(
+                  "relative overflow-hidden rounded-xl border bg-gradient-to-br p-3 sm:p-4 ring-1 text-left transition-all hover:ring-2",
+                  netGrad.from, netGrad.to, netGrad.ring,
+                  filterType === "all" && "ring-2",
+                )}>
+                  <p className="text-[10px] sm:text-xs uppercase tracking-wide text-muted-foreground font-medium">Net</p>
+                  <p className={cn("text-sm sm:text-lg font-bold tabular-nums leading-tight truncate mt-0.5", netPositive ? "text-emerald-400" : "text-red-400")}>
+                    {netPositive ? "+" : ""}{formatCurrency(net)}
+                  </p>
+                  <p className="text-[10px] sm:text-xs text-muted-foreground mt-0.5">{filtered.length} transactions</p>
+                </button>
+              )
+            })()}
+            <button onClick={() => setFilterType(filterType === "inflow" ? "all" : "inflow")} className={cn(
+              "relative overflow-hidden rounded-xl border bg-gradient-to-br from-emerald-500/25 to-teal-500/5 p-3 sm:p-4 ring-1 ring-emerald-500/40 text-left transition-all hover:ring-2 hover:ring-emerald-400/70",
+              filterType === "inflow" && "ring-2 ring-emerald-400",
+            )}>
+              <p className="text-[10px] sm:text-xs uppercase tracking-wide text-muted-foreground font-medium">Total Inflow</p>
+              <p className="text-sm sm:text-lg font-bold text-emerald-400 tabular-nums leading-tight truncate mt-0.5">+{formatCurrency(totalInflow)}</p>
+              <p className="text-[10px] sm:text-xs text-muted-foreground mt-0.5">{cashFiltered.filter((t) => t.type === "inflow").length} transactions</p>
+            </button>
+            <button onClick={() => setFilterType(filterType === "outflow" ? "all" : "outflow")} className={cn(
+              "relative overflow-hidden rounded-xl border bg-gradient-to-br from-red-500/25 to-rose-500/5 p-3 sm:p-4 ring-1 ring-red-500/40 text-left transition-all hover:ring-2 hover:ring-red-400/70",
+              filterType === "outflow" && "ring-2 ring-red-400",
+            )}>
+              <p className="text-[10px] sm:text-xs uppercase tracking-wide text-muted-foreground font-medium">Total Outflow</p>
+              <p className="text-sm sm:text-lg font-bold text-red-400 tabular-nums leading-tight truncate mt-0.5">-{formatCurrency(totalOutflow)}</p>
+              <p className="text-[10px] sm:text-xs text-muted-foreground mt-0.5">{cashFiltered.filter((t) => t.type === "outflow").length} transactions</p>
+            </button>
           </div>
 
           {/* Search + filter toggle */}

@@ -97,7 +97,10 @@ export async function GET(req: Request) {
     const paidInstallments = p.installments
       .filter((i) => i.status === "paid")
       .reduce((sum, i) => sum + Number(i.amount), 0)
-    const amountPaid = Number(p.downPayment) + paidInstallments
+    // Avoid double-counting: if the ledger has a downpayment-type entry, the downPayment
+    // is already included in paidInstallments.
+    const hasDownpaymentEntry = p.installments.some((i) => i.type === "downpayment")
+    const amountPaid = paidInstallments + (hasDownpaymentEntry ? 0 : Number(p.downPayment))
     return {
       id: p.id,
       name: p.name,
@@ -146,7 +149,24 @@ export async function GET(req: Request) {
     status: l.status,
     dueDate: l.dueDate?.toISOString() ?? null,
   }))
-  const liabilityTotal = liabilityItems.reduce((sum, l) => sum + l.remaining, 0)
+
+  // Synthesize per-property remaining-installment debt as liability lines.
+  // Includes BOTH "pending" (future obligations) and "unpaid" (missed) installments —
+  // when you sign a contract you owe the full schedule, regardless of paid-status timing.
+  const realEstateDebtItems = properties
+    .map((p) => {
+      const pending = (p.installments ?? [])
+        .filter((i) => i.status === "pending")
+        .reduce((sum, i) => sum + Number(i.amount), 0)
+      const unpaid = (p.installments ?? [])
+        .filter((i) => i.status === "unpaid")
+        .reduce((sum, i) => sum + Number(i.amount), 0)
+      return { propertyId: p.id, name: p.name, pending, unpaid, remaining: pending + unpaid }
+    })
+    .filter((d) => d.remaining > 0)
+  const realEstateDebtTotal = realEstateDebtItems.reduce((sum, d) => sum + d.remaining, 0)
+
+  const liabilityTotal = liabilityItems.reduce((sum, l) => sum + l.remaining, 0) + realEstateDebtTotal
 
   // ── Cash Flow (quarter window) ────────────────────────────────────────────
   // Exclude reconciliation adjustments — they correct the ledger balance, not real cash flow
@@ -182,7 +202,7 @@ export async function GET(req: Request) {
       receivables: { total: receivableTotal, items: receivableItems },
       totalAssets,
     },
-    liabilities: { total: liabilityTotal, items: liabilityItems },
+    liabilities: { total: liabilityTotal, items: liabilityItems, realEstateDebt: { total: realEstateDebtTotal, items: realEstateDebtItems } },
     cashFlow: { inflow, outflow, net: inflow - outflow, categories },
     netWorth: totalAssets - liabilityTotal,
   })

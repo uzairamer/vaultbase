@@ -205,19 +205,25 @@ model LiabilityPayment {
 // ─── INVESTMENTS — REAL ESTATE ───────────────────────────────────────────────
 
 model Property {
-  id           String    @id @default(cuid())
-  userId       String
-  name         String
-  location     String?
-  totalPrice   Decimal   @db.Decimal(15, 2)
-  downPayment  Decimal   @db.Decimal(15, 2) @default(0)
-  currentValue Decimal?  @db.Decimal(15, 2)
-  status       String    @default("active") // active, sold, completed
-  purchaseDate DateTime
-  notes        String?
-  archivedAt   DateTime?
-  createdAt    DateTime  @default(now())
-  updatedAt    DateTime  @updatedAt
+  id                   String    @id @default(cuid())
+  userId               String
+  name                 String
+  location             String?
+  totalPrice           Decimal   @db.Decimal(15, 2)
+  downPayment          Decimal   @db.Decimal(15, 2) @default(0)
+  monthlyInstallment   Decimal?  @db.Decimal(15, 2)
+  balloonAmount        Decimal?  @db.Decimal(15, 2)
+  balloonEveryNMonths  Int?
+  installmentStartDate DateTime?
+  installmentDueDay    Int?      // 1-31, day of month
+  installmentMonths    Int?      // total tenure in months
+  currentValue         Decimal?  @db.Decimal(15, 2)
+  status               String    @default("active") // active, sold, completed
+  purchaseDate         DateTime
+  notes                String?
+  archivedAt           DateTime?
+  createdAt            DateTime  @default(now())
+  updatedAt            DateTime  @updatedAt
 
   user         User          @relation(fields: [userId], references: [id], onDelete: Cascade)
   installments Installment[]
@@ -226,11 +232,14 @@ model Property {
 model Installment {
   id          String    @id @default(cuid())
   propertyId  String
+  type        String    @default("regular") // regular | balloon
   amount      Decimal   @db.Decimal(15, 2)
   dueDate     DateTime
   paidDate    DateTime?
-  status      String    @default("pending") // pending, paid, overdue
+  status      String    @default("pending") // pending | paid | unpaid
   receiptNote String?
+  createdAt   DateTime  @default(now())
+  updatedAt   DateTime  @default(now()) @updatedAt
 
   property Property @relation(fields: [propertyId], references: [id], onDelete: Cascade)
 }

@@ -50,6 +50,56 @@ export function useDeleteProperty() {
   })
 }
 
+export function useUpdateInstallment() {
+  const qc = useQueryClient()
+  return useMutation({
+    mutationFn: (data: { installmentId: string; status?: "paid" | "unpaid" | "pending"; paidDate?: string; receiptNote?: string; amount?: number; dueDate?: string }) =>
+      mutator("/api/investments/real-estate", { method: "PUT", body: JSON.stringify(data) }),
+    onSuccess: () => {
+      qc.invalidateQueries({ queryKey: ["properties"] })
+      qc.invalidateQueries({ queryKey: ["insights"] })
+    },
+  })
+}
+
+export function useRegenerateLedger() {
+  const qc = useQueryClient()
+  return useMutation({
+    mutationFn: (data: {
+      propertyId: string
+      downPayment?: number
+      purchaseDate?: string
+      monthlyInstallment?: number | null
+      balloonAmount?: number | null
+      balloonEveryNMonths?: number | null
+      installmentStartDate?: string | null
+      installmentDueDay?: number | null
+      installmentMonths?: number | null
+    }) => mutator("/api/investments/real-estate/regenerate-ledger", { method: "POST", body: JSON.stringify(data) }),
+    onSuccess: () => {
+      qc.invalidateQueries({ queryKey: ["properties"] })
+      qc.invalidateQueries({ queryKey: ["insights"] })
+    },
+  })
+}
+
+export function useAutoMarkInstallments() {
+  const qc = useQueryClient()
+  return useMutation({
+    mutationFn: (propertyId?: string) =>
+      mutator("/api/investments/real-estate/installments/auto-mark", {
+        method: "POST",
+        body: JSON.stringify(propertyId ? { propertyId } : {}),
+      }),
+    onSuccess: (data: { marked: number }) => {
+      if (data.marked > 0) {
+        qc.invalidateQueries({ queryKey: ["properties"] })
+        qc.invalidateQueries({ queryKey: ["insights"] })
+      }
+    },
+  })
+}
+
 // Stocks
 export function useStocks() {
   return useQuery({ queryKey: ["stocks"], queryFn: () => fetcher("/api/investments/stocks") })

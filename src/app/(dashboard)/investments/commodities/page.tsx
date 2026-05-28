@@ -13,7 +13,7 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@
 import { EmptyState } from "@/components/shared/empty-state"
 import { Plus, Gem, Trash2, Archive } from "lucide-react"
 import { Badge } from "@/components/ui/badge"
-import { formatCurrency, formatPercent } from "@/lib/utils"
+import { cn, formatCurrency, formatPercent } from "@/lib/utils"
 import { COMMODITY_TYPES, COMMODITY_UNITS } from "@/lib/constants"
 import { toast } from "sonner"
 import Link from "next/link"
@@ -113,7 +113,7 @@ export default function CommoditiesPage() {
       {(commodities as Record<string, unknown>[]).length === 0 ? (
         <EmptyState icon={Gem} title="No commodities" description="Track gold, silver, and other commodity holdings." />
       ) : (
-        <div className="grid gap-4 md:grid-cols-2 lg:grid-cols-3">
+        <div className="grid gap-2 sm:gap-3 grid-cols-1 sm:grid-cols-2 lg:grid-cols-3">
           {(commodities as Record<string, unknown>[]).map((c) => {
             const qty = Number(c.quantity)
             const avg = Number(c.avgBuyPrice)
@@ -123,26 +123,29 @@ export default function CommoditiesPage() {
             const pnlPct = avg > 0 ? ((cur - avg) / avg) * 100 : 0
             return (
               <Link key={c.id as string} href={`/investments/commodities/${c.id}`}>
-                <Card className="hover:border-primary/50 transition-colors cursor-pointer">
-                  <CardHeader className="flex flex-row items-center justify-between pb-2">
-                    <CardTitle className="text-base capitalize">{c.type as string}</CardTitle>
-                    <div className="flex items-center gap-1">
-                      <Badge variant="secondary">{qty} {c.unit as string}</Badge>
-                      <Button variant="ghost" size="icon" className="h-8 w-8" onClick={(e) => {
+                <div className={cn(
+                  "relative overflow-hidden rounded-xl border bg-gradient-to-br from-yellow-500/25 to-amber-500/5 p-4 ring-1 ring-yellow-500/40 transition-all cursor-pointer hover:ring-2 hover:ring-yellow-400/70 h-full",
+                )}>
+                  <div className="flex items-start justify-between gap-2 mb-2">
+                    <div className="min-w-0 flex-1">
+                      <p className="text-base font-semibold capitalize">{c.type as string}</p>
+                      <p className="text-xs text-muted-foreground mt-0.5 tabular-nums">{qty} {c.unit as string} · @ {formatCurrency(avg)}</p>
+                    </div>
+                    <div className="flex items-center gap-1 shrink-0">
+                      <Badge variant="outline" className="bg-yellow-500/10 border-yellow-500/40 text-yellow-300 text-[10px] h-5 tabular-nums">{qty} {c.unit as string}</Badge>
+                      <Button variant="ghost" size="icon" className="h-7 w-7" onClick={(e) => {
                         e.preventDefault()
                         deleteCommodity.mutate(c.id as string, { onSuccess: () => toast.success("Deleted") })
                       }}>
                         <Trash2 className="h-3.5 w-3.5" />
                       </Button>
                     </div>
-                  </CardHeader>
-                  <CardContent>
-                    <div className="text-2xl font-bold">{formatCurrency(value)}</div>
-                    <p className={`text-sm ${pnl >= 0 ? "text-green-500" : "text-red-500"}`}>
-                      {formatCurrency(pnl)} ({formatPercent(pnlPct)})
-                    </p>
-                  </CardContent>
-                </Card>
+                  </div>
+                  <p className="text-2xl font-bold tabular-nums">{formatCurrency(value)}</p>
+                  <p className={cn("text-sm font-medium tabular-nums mt-1", pnl >= 0 ? "text-emerald-400" : "text-red-400")}>
+                    {pnl >= 0 ? "+" : ""}{formatCurrency(pnl)} ({formatPercent(pnlPct)})
+                  </p>
+                </div>
               </Link>
             )
           })}

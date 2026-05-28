@@ -10,7 +10,7 @@ export async function GET() {
   const [wallets, properties, stocks, commodities, sideInvestments, receivables, liabilities, transactions] =
     await Promise.all([
       prisma.wallet.findMany({ where: { userId } }),
-      prisma.property.findMany({ where: { userId, archivedAt: null } }),
+      prisma.property.findMany({ where: { userId, archivedAt: null }, include: { installments: true } }),
       prisma.stockHolding.findMany({ where: { userId, archivedAt: null }, include: { trades: true } }),
       prisma.commodityHolding.findMany({ where: { userId, archivedAt: null }, include: { trades: true } }),
       prisma.sideInvestment.findMany({ where: { userId } }),

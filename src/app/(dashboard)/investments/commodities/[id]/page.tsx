@@ -57,11 +57,33 @@ export default function CommodityDetailPage({ params }: { params: Promise<{ id: 
     <div>
       <PageHeader title={`${(c.type as string).charAt(0).toUpperCase() + (c.type as string).slice(1)}`} description={`${qty} ${c.unit as string}`} />
 
-      <div className="grid gap-4 md:grid-cols-4 mb-8">
-        <StatCard title="Quantity" value={`${qty} ${c.unit}`} icon={Hash} />
-        <StatCard title="Avg Buy Price" value={formatCurrency(avg)} icon={DollarSign} />
-        <StatCard title="Current Value" value={formatCurrency(value)} icon={Gem} />
-        <StatCard title="P&L" value={`${formatCurrency(pnl)} (${formatPercent(avg > 0 ? ((cur - avg) / avg) * 100 : 0)})`} icon={TrendingUp} />
+      <div className="grid gap-2 sm:gap-3 grid-cols-2 lg:grid-cols-4 mb-8">
+        <StatCard
+          title="Quantity"
+          value={`${qty} ${c.unit}`}
+          icon={Hash}
+          gradient={{ from: "from-sky-500/25", to: "to-blue-500/5", ring: "ring-sky-500/40", accent: "text-sky-400" }}
+        />
+        <StatCard
+          title="Avg Buy Price"
+          value={formatCurrency(avg)}
+          icon={DollarSign}
+          gradient={{ from: "from-indigo-500/25", to: "to-violet-500/5", ring: "ring-indigo-500/40", accent: "text-indigo-400" }}
+        />
+        <StatCard
+          title="Current Value"
+          value={formatCurrency(value)}
+          icon={Gem}
+          gradient={{ from: "from-yellow-500/25", to: "to-amber-500/5", ring: "ring-yellow-500/40", accent: "text-yellow-400" }}
+        />
+        <StatCard
+          title="P&L"
+          value={`${formatCurrency(pnl)} (${formatPercent(avg > 0 ? ((cur - avg) / avg) * 100 : 0)})`}
+          icon={TrendingUp}
+          gradient={pnl >= 0
+            ? { from: "from-emerald-500/25", to: "to-teal-500/5", ring: "ring-emerald-500/40", accent: "text-emerald-400" }
+            : { from: "from-red-500/25", to: "to-rose-500/5", ring: "ring-red-500/40", accent: "text-red-400" }}
+        />
       </div>
 
       <div className="flex items-center justify-between mb-4">

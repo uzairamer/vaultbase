@@ -27,11 +27,33 @@ export default function SideInvestmentDetailPage({ params }: { params: Promise<{
     <div>
       <PageHeader title={inv.name as string} description={inv.type as string} />
 
-      <div className="grid gap-4 md:grid-cols-4 mb-8">
-        <StatCard title="Invested" value={formatCurrency(invested)} icon={DollarSign} />
-        <StatCard title="Current Value" value={formatCurrency(current)} icon={Briefcase} />
-        <StatCard title="P&L" value={`${formatCurrency(pnl)} (${formatPercent(pnlPct)})`} icon={TrendingUp} />
-        <StatCard title="Started" value={format(new Date(inv.startDate as string), "MMM dd, yyyy")} icon={Calendar} />
+      <div className="grid gap-2 sm:gap-3 grid-cols-2 lg:grid-cols-4 mb-8">
+        <StatCard
+          title="Invested"
+          value={formatCurrency(invested)}
+          icon={DollarSign}
+          gradient={{ from: "from-indigo-500/25", to: "to-violet-500/5", ring: "ring-indigo-500/40", accent: "text-indigo-400" }}
+        />
+        <StatCard
+          title="Current Value"
+          value={formatCurrency(current)}
+          icon={Briefcase}
+          gradient={{ from: "from-pink-500/25", to: "to-rose-500/5", ring: "ring-pink-500/40", accent: "text-pink-400" }}
+        />
+        <StatCard
+          title="P&L"
+          value={`${formatCurrency(pnl)} (${formatPercent(pnlPct)})`}
+          icon={TrendingUp}
+          gradient={pnl >= 0
+            ? { from: "from-emerald-500/25", to: "to-teal-500/5", ring: "ring-emerald-500/40", accent: "text-emerald-400" }
+            : { from: "from-red-500/25", to: "to-rose-500/5", ring: "ring-red-500/40", accent: "text-red-400" }}
+        />
+        <StatCard
+          title="Started"
+          value={format(new Date(inv.startDate as string), "MMM dd, yyyy")}
+          icon={Calendar}
+          gradient={{ from: "from-sky-500/25", to: "to-blue-500/5", ring: "ring-sky-500/40", accent: "text-sky-400" }}
+        />
       </div>
 
       <Card>

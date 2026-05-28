@@ -60,15 +60,32 @@ export default function StockDetailPage({ params }: { params: Promise<{ id: stri
     <div>
       <PageHeader title={`${s.symbol} — ${s.name}`} description="Stock holding details" />
 
-      <div className="grid gap-4 md:grid-cols-4 mb-8">
-        <StatCard title="Quantity" value={qty.toFixed(2)} icon={Hash} />
-        <StatCard title="Avg Buy Price" value={formatCurrency(avg)} icon={DollarSign} />
-        <StatCard title="Current Value" value={formatCurrency(value)} icon={BarChart3} />
+      <div className="grid gap-2 sm:gap-3 grid-cols-2 lg:grid-cols-4 mb-8">
+        <StatCard
+          title="Quantity"
+          value={qty.toFixed(2)}
+          icon={Hash}
+          gradient={{ from: "from-sky-500/25", to: "to-blue-500/5", ring: "ring-sky-500/40", accent: "text-sky-400" }}
+        />
+        <StatCard
+          title="Avg Buy Price"
+          value={formatCurrency(avg)}
+          icon={DollarSign}
+          gradient={{ from: "from-indigo-500/25", to: "to-violet-500/5", ring: "ring-indigo-500/40", accent: "text-indigo-400" }}
+        />
+        <StatCard
+          title="Current Value"
+          value={formatCurrency(value)}
+          icon={BarChart3}
+          gradient={{ from: "from-purple-500/25", to: "to-fuchsia-500/5", ring: "ring-purple-500/40", accent: "text-purple-400" }}
+        />
         <StatCard
           title="P&L"
           value={`${formatCurrency(pnl)} (${formatPercent(pnlPct)})`}
           icon={TrendingUp}
-          className={pnl >= 0 ? "border-green-500/20" : "border-red-500/20"}
+          gradient={pnl >= 0
+            ? { from: "from-emerald-500/25", to: "to-teal-500/5", ring: "ring-emerald-500/40", accent: "text-emerald-400" }
+            : { from: "from-red-500/25", to: "to-rose-500/5", ring: "ring-red-500/40", accent: "text-red-400" }}
         />
       </div>
 

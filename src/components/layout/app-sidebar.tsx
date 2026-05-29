@@ -13,7 +13,6 @@ import {
   Wallet,
   Users,
   HandCoins,
-  Upload,
   Tag,
   PieChart,
   LineChart,
@@ -74,9 +73,7 @@ const navItems: NavItem[] = [
       { title: "Wallets", href: "/expenses/wallets", icon: Wallet },
       { title: "Receivables", href: "/expenses/receivables", icon: Users },
       { title: "Liabilities", href: "/expenses/liabilities", icon: HandCoins },
-      { title: "Import", href: "/expenses/import", icon: Upload },
       { title: "Categories", href: "/expenses/categories", icon: Tag },
-      { title: "Financial Position", href: "/expenses/report", icon: FileBarChart2 },
     ],
   },
   {
@@ -100,6 +97,7 @@ const navItems: NavItem[] = [
       },
       { title: "Commodities", href: "/insights/commodities", icon: BarChart },
       { title: "Expenses", href: "/insights/expenses", icon: PieChart },
+      { title: "Financial Position", href: "/expenses/report", icon: FileBarChart2 },
     ],
   },
   {

@@ -2,6 +2,7 @@ import { auth } from "@/lib/auth"
 import { prisma } from "@/lib/prisma"
 import { cn, formatCurrency, formatCompact } from "@/lib/utils"
 import { totalStocksValue } from "@/lib/stocks"
+import { pricePerUnit } from "@/lib/commodity-prices"
 import { PageHeader } from "@/components/shared/page-header"
 import { Building2, BarChart3, Gem, Briefcase } from "lucide-react"
 import Link from "next/link"
@@ -19,7 +20,7 @@ export default async function InvestmentsPage() {
   const [properties, stocks, commodities, sideInvestments] = await Promise.all([
     prisma.property.findMany({ where: { userId, archivedAt: null } }),
     prisma.stockHolding.findMany({ where: { userId, archivedAt: null }, include: { trades: true } }),
-    prisma.commodityHolding.findMany({ where: { userId, archivedAt: null }, include: { trades: true } }),
+    prisma.commodityHolding.findMany({ where: { userId, archivedAt: null }, include: { trades: true, staticPrice: { include: { entries: { orderBy: { date: "desc" }, take: 1 } } } } }),
     prisma.sideInvestment.findMany({ where: { userId, status: "active" } }),
   ])
 
@@ -33,7 +34,11 @@ export default async function InvestmentsPage() {
       const buyQty = toNum(c.quantity)
       const soldQty = (c.trades ?? []).filter((t) => t.type === "sell").reduce((a, t) => a + toNum(t.quantity), 0)
       const netQty = Math.max(0, buyQty - soldQty)
-      return sum + netQty * toNum(c.currentPrice ?? c.avgBuyPrice)
+      const latestEntry = c.staticPrice?.entries?.[0]
+      const curPrice = latestEntry
+        ? pricePerUnit(toNum(latestEntry.pricePerTola), c.unit)
+        : toNum(c.currentPrice ?? c.avgBuyPrice)
+      return sum + netQty * curPrice
     },
     0
   )
@@ -112,7 +117,8 @@ export default async function InvestmentsPage() {
               <div className="flex items-start justify-between gap-2">
                 <div className="min-w-0 flex-1">
                   <p className="text-[10px] sm:text-xs uppercase tracking-wide text-muted-foreground font-medium">{cat.title}</p>
-                  <p className="text-base sm:text-2xl font-bold tabular-nums truncate mt-0.5">{formatCompact(cat.value)}</p>
+                  <p className="text-xl sm:text-2xl font-bold tabular-nums truncate mt-0.5">{formatCompact(cat.value)}</p>
+                  <p className="text-[10px] sm:text-xs text-muted-foreground/70 tabular-nums">{formatCurrency(cat.value)}</p>
                   <p className="text-[10px] sm:text-xs text-muted-foreground mt-0.5">{cat.count} holdings</p>
                   <p className="text-[10px] text-muted-foreground mt-0.5 line-clamp-2">{cat.description}</p>
                 </div>

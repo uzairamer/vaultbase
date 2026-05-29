@@ -341,7 +341,10 @@ export default function CommoditiesPage() {
                   <div className="space-y-1 mt-auto">
                     <div className="flex items-center justify-between text-xs text-muted-foreground tabular-nums">
                       <span>Received</span>
-                      <span className="font-medium text-foreground">{formatCompact(totalReceived ?? 0)}</span>
+                      <div className="text-right">
+                        <span className="font-medium text-foreground block">{formatCompact(totalReceived ?? 0)}</span>
+                        <span className="text-[10px] text-muted-foreground/70 tabular-nums">{formatCurrency(totalReceived ?? 0)}</span>
+                      </div>
                     </div>
                     <div className="flex items-center justify-between text-xs text-muted-foreground tabular-nums">
                       <span>Paid</span>
@@ -361,6 +364,7 @@ export default function CommoditiesPage() {
                       <span className="text-[11px] text-muted-foreground">Market value</span>
                       <p className="text-xl font-bold tabular-nums">{formatCompact(currentValue)}</p>
                     </div>
+                    <p className="text-[10px] text-muted-foreground/70 tabular-nums text-right">{formatCurrency(currentValue)}</p>
                     <div className="flex items-center justify-between text-xs text-muted-foreground tabular-nums">
                       <span>Paid</span>
                       <span className="text-foreground/70">{formatCompact(totalCostPaid)}</span>

@@ -1,7 +1,7 @@
 "use client"
 
-import { useState, useMemo } from "react"
-import { useStocks, useCreateStock, useDeleteStock, useSellStock } from "@/modules/investments/hooks"
+import { useState, useMemo, useEffect, useRef } from "react"
+import { useStocks, useCreateStock, useDeleteStock, useSellStock, useSyncStockPrices } from "@/modules/investments/hooks"
 import { InvestmentArchiveDialog } from "@/modules/investments/components/archive-dialog"
 import { ConfirmDeleteDialog } from "@/components/shared/confirm-delete-dialog"
 import { useWallets } from "@/modules/expenses/hooks"
@@ -46,6 +46,9 @@ export default function StocksPage() {
   const sellStock = useSellStock()
   const { data: wallets = [] } = useWallets()
 
+  const syncPrices = useSyncStockPrices()
+  const syncedRef = useRef(false)
+
   const [addOpen, setAddOpen] = useState(false)
   const [sellOpen, setSellOpen] = useState(false)
   const [archiveOpen, setArchiveOpen] = useState(false)
@@ -62,6 +65,19 @@ export default function StocksPage() {
   const symbols = stockList.map((s) => s.symbol as string)
   const { data: livePrices } = useLivePrices(symbols)
   const livePriceMap = new Map((livePrices ?? []).map((lp) => [lp.symbol, lp.price]))
+
+  // Persist live prices to DB so server-side pages (investments overview, financial position)
+  // always show current market values, not cost basis.
+  useEffect(() => {
+    if (!livePrices?.length || syncedRef.current) return
+    const prices = livePrices
+      .filter((lp) => lp.price > 0)
+      .map((lp) => ({ symbol: lp.symbol, price: lp.price }))
+    if (prices.length > 0) {
+      syncedRef.current = true
+      syncPrices.mutate(prices)
+    }
+  }, [livePrices]) // eslint-disable-line react-hooks/exhaustive-deps
 
   const getPrice = (s: Record<string, unknown>) =>
     livePriceMap.get(s.symbol as string) ?? Number(s.currentPrice ?? s.avgBuyPrice)

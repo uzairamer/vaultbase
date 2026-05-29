@@ -1,6 +1,7 @@
 import { auth } from "@/lib/auth"
 import { prisma } from "@/lib/prisma"
 import { NextResponse } from "next/server"
+import { pricePerUnit } from "@/lib/commodity-prices"
 
 function getQuarterRange(year: number, quarter: number): { from: Date; to: Date } {
   const monthStart = (quarter - 1) * 3
@@ -27,7 +28,7 @@ export async function GET(req: Request) {
     await Promise.all([
       prisma.wallet.findMany({ where: { userId }, include: { segments: true } }),
       prisma.stockHolding.findMany({ where: { userId, archivedAt: null }, include: { trades: { where: { type: "sell" } } } }),
-      prisma.commodityHolding.findMany({ where: { userId, archivedAt: null }, include: { trades: { where: { type: "sell" } } } }),
+      prisma.commodityHolding.findMany({ where: { userId, archivedAt: null }, include: { trades: { where: { type: "sell" } }, staticPrice: { include: { entries: { orderBy: { date: "desc" }, take: 1 } } } } }),
       prisma.property.findMany({ where: { userId, archivedAt: null }, include: { installments: true } }),
       prisma.sideInvestment.findMany({ where: { userId } }),
       prisma.receivable.findMany({ where: { userId, status: { not: "settled" } } }),
@@ -83,13 +84,16 @@ export async function GET(req: Request) {
     const buyQty = Number(c.quantity)
     const soldQty = (c.trades ?? []).reduce((sum, t) => sum + Number(t.quantity), 0)
     const qty = Math.max(0, buyQty - soldQty)
-    const price = c.currentPrice ? Number(c.currentPrice) : Number(c.avgBuyPrice)
+    const latestEntry = c.staticPrice?.entries?.[0]
+    const price = latestEntry
+      ? pricePerUnit(Number(latestEntry.pricePerTola), c.unit)
+      : c.currentPrice ? Number(c.currentPrice) : Number(c.avgBuyPrice)
     return {
       type: c.type,
       unit: c.unit,
       quantity: qty,
       avgBuyPrice: Number(c.avgBuyPrice),
-      currentPrice: c.currentPrice ? Number(c.currentPrice) : null,
+      currentPrice: price,
       value: price * qty,
     }
   })

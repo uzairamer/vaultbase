@@ -106,6 +106,15 @@ export function useRegenerateLedger() {
   })
 }
 
+export function useSyncStockPrices() {
+  const qc = useQueryClient()
+  return useMutation({
+    mutationFn: (prices: Array<{ symbol: string; price: number }>) =>
+      mutator("/api/investments/stocks/sync-prices", { method: "POST", body: JSON.stringify({ prices }) }),
+    onSuccess: () => qc.invalidateQueries({ queryKey: ["stocks"] }),
+  })
+}
+
 export function useAutoMarkInstallments() {
   const qc = useQueryClient()
   return useMutation({

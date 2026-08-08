@@ -464,7 +464,7 @@ export default function CommoditiesPage() {
         onOpenChange={(v) => { if (!v) setDeleteId(null) }}
         title={`Delete ${deleteName}?`}
         description={`This will permanently delete this ${deleteName} holding and all its trade history. This cannot be undone.`}
-        note="Any wallet transactions created when buying or selling this commodity will be kept as-is — they represent real cash flows. Delete them manually from the Expenses ledger if needed."
+        note="Any wallet transactions created when buying or selling this commodity will be kept as-is — they represent real cash flows. Delete them manually from the Cash Flow ledger if needed."
         onConfirm={() => deleteCommodity.mutate(deleteId!, {
           onSuccess: () => toast.success("Deleted"),
           onError: (err) => toast.error(err.message),

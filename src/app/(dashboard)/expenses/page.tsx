@@ -1,11 +1,11 @@
 "use client"
 
 import { useState, useMemo } from "react"
-import { useTransactions, useCreateTransaction, useDeleteTransaction, useWallets, useCategories, useReceivables, useLiabilities } from "@/modules/expenses/hooks"
+import { useTransactions, useDeleteTransaction, useWallets, useCategories } from "@/modules/expenses/hooks"
+import { AddTransactionDialog } from "@/modules/expenses/components/add-transaction-dialog"
 import { PageHeader } from "@/components/shared/page-header"
 import { Button } from "@/components/ui/button"
 import { Card, CardContent } from "@/components/ui/card"
-import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogTrigger } from "@/components/ui/dialog"
 import { Input } from "@/components/ui/input"
 import { Label } from "@/components/ui/label"
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select"
@@ -26,21 +26,14 @@ export default function ExpensesPage() {
   const { data: transactions = [], isLoading } = useTransactions()
   const { data: wallets = [] } = useWallets()
   const { data: categories = [] } = useCategories()
-  const { data: receivables = [] } = useReceivables()
-  const { data: liabilities = [] } = useLiabilities()
-  const createTx = useCreateTransaction()
   const deleteTx = useDeleteTransaction()
   const [open, setOpen] = useState(false)
-  const [txType, setTxType] = useState<"inflow" | "outflow" | null>(null)
-  const [subType, setSubType] = useState("")
-  const [selectedWalletId, setSelectedWalletId] = useState("")
-  const [selectedSegmentId, setSelectedSegmentId] = useState("")
 
   // Filter state
   const [filterType, setFilterType] = useState<"all" | "inflow" | "outflow">("all")
   const [filterSubType, setFilterSubType] = useState<string>("all")
   const [filterWallet, setFilterWallet] = useState<string>("all")
-  const [filterCategory, setFilterCategory] = useState<string>("all")
+  const [filterCategories, setFilterCategories] = useState<string[]>([]) // empty = all; "none" = untagged
   const [filterDateFrom, setFilterDateFrom] = useState("")
   const [filterDateTo, setFilterDateTo] = useState("")
   const [searchQuery, setSearchQuery] = useState("")
@@ -48,14 +41,21 @@ export default function ExpensesPage() {
 
   const txList = transactions as Record<string, unknown>[]
 
+  function toggleCategory(id: string) {
+    setFilterCategories((prev) =>
+      prev.includes(id) ? prev.filter((c) => c !== id) : [...prev, id]
+    )
+  }
+
   const filtered = useMemo(() => {
     return txList.filter((tx) => {
       if (filterType !== "all" && tx.type !== filterType) return false
       if (filterSubType !== "all" && tx.subType !== filterSubType) return false
       if (filterWallet !== "all" && tx.walletId !== filterWallet) return false
-      if (filterCategory !== "all") {
-        if (filterCategory === "none" && tx.categoryId) return false
-        if (filterCategory !== "none" && tx.categoryId !== filterCategory) return false
+      if (filterCategories.length > 0) {
+        const matchesNone = filterCategories.includes("none") && !tx.categoryId
+        const matchesTag  = filterCategories.some((id) => id !== "none" && tx.categoryId === id)
+        if (!matchesNone && !matchesTag) return false
       }
       if (filterDateFrom) {
         const txDate = new Date(tx.date as string)
@@ -74,13 +74,13 @@ export default function ExpensesPage() {
       }
       return true
     })
-  }, [txList, filterType, filterSubType, filterWallet, filterCategory, filterDateFrom, filterDateTo, searchQuery])
+  }, [txList, filterType, filterSubType, filterWallet, filterCategories, filterDateFrom, filterDateTo, searchQuery])
 
   const activeFilterCount = [
     filterType !== "all",
     filterSubType !== "all",
     filterWallet !== "all",
-    filterCategory !== "all",
+    filterCategories.length > 0,
     !!filterDateFrom,
     !!filterDateTo,
   ].filter(Boolean).length
@@ -93,157 +93,19 @@ export default function ExpensesPage() {
     setFilterType("all")
     setFilterSubType("all")
     setFilterWallet("all")
-    setFilterCategory("all")
+    setFilterCategories([])
     setFilterDateFrom("")
     setFilterDateTo("")
     setSearchQuery("")
   }
 
-  function handleSubmit(e: React.FormEvent<HTMLFormElement>) {
-    e.preventDefault()
-    const fd = new FormData(e.currentTarget)
-    const payload: Record<string, unknown> = {
-      walletId: fd.get("walletId") as string,
-      categoryId: (fd.get("categoryId") as string) || undefined,
-      type: txType,
-      subType: subType || undefined,
-      amount: Number(fd.get("amount")),
-      description: fd.get("description") as string,
-      date: fd.get("date") as string,
-      segmentId: selectedSegmentId || undefined,
-    }
-    if (subType === "lending") payload.personName = fd.get("personName") as string
-    if (subType === "receivable_collection") payload.receivableId = fd.get("receivableId") as string
-    if (subType === "debt_repayment") payload.liabilityId = fd.get("liabilityId") as string
-
-    createTx.mutate(payload, {
-      onSuccess: () => {
-        setOpen(false)
-        setTxType(null)
-        setSubType("")
-        toast.success(
-          subType === "lending" ? "Transaction added & receivable created"
-            : subType === "receivable_collection" ? "Transaction added & receivable updated"
-            : subType === "debt_repayment" ? "Transaction added & liability updated"
-            : "Transaction added"
-        )
-      },
-      onError: (err) => toast.error(err.message),
-    })
-  }
-
-  function resetDialog(isOpen: boolean) {
-    setOpen(isOpen)
-    if (!isOpen) { setTxType(null); setSubType(""); setSelectedWalletId(""); setSelectedSegmentId("") }
-  }
-
   if (isLoading) return <div className="p-6">Loading...</div>
-
-  const subtypes = txType === "inflow" ? INFLOW_SUBTYPES : txType === "outflow" ? OUTFLOW_SUBTYPES : []
 
   return (
     <div>
       <PageHeader title="Transaction Ledger" description="Complete record of all transactions">
-        <Dialog open={open} onOpenChange={resetDialog}>
-          <DialogTrigger asChild>
-            <Button><Plus className="mr-2 h-4 w-4" /> Add Transaction</Button>
-          </DialogTrigger>
-          <DialogContent className="sm:max-w-lg">
-            <DialogHeader>
-              <DialogTitle>Add Transaction</DialogTitle>
-            </DialogHeader>
-            {!txType ? (
-              <div className="grid grid-cols-2 gap-4 py-4">
-                <button onClick={() => setTxType("inflow")} className="flex flex-col items-center gap-3 rounded-xl border-2 border-border p-6 transition-colors hover:border-green-500 hover:bg-green-500/5">
-                  <ArrowDownLeft className="h-10 w-10 text-green-500" />
-                  <div className="text-center"><p className="font-semibold text-lg">Inflow</p><p className="text-xs text-muted-foreground mt-1">Money coming in</p></div>
-                </button>
-                <button onClick={() => setTxType("outflow")} className="flex flex-col items-center gap-3 rounded-xl border-2 border-border p-6 transition-colors hover:border-red-500 hover:bg-red-500/5">
-                  <ArrowUpRight className="h-10 w-10 text-red-500" />
-                  <div className="text-center"><p className="font-semibold text-lg">Outflow</p><p className="text-xs text-muted-foreground mt-1">Money going out</p></div>
-                </button>
-              </div>
-            ) : (
-              <form onSubmit={handleSubmit} className="space-y-4">
-                <div className="flex items-center gap-2">
-                  <Button type="button" variant="ghost" size="sm" onClick={() => { setTxType(null); setSubType("") }}>&larr; Back</Button>
-                  <Badge variant={txType === "inflow" ? "default" : "destructive"} className="gap-1">
-                    {txType === "inflow" ? <ArrowDownLeft className="h-3 w-3" /> : <ArrowUpRight className="h-3 w-3" />}
-                    {txType === "inflow" ? "Inflow" : "Outflow"}
-                  </Badge>
-                </div>
-                <div className="space-y-2">
-                  <Label>{txType === "inflow" ? "Inflow Type" : "Outflow Type"}</Label>
-                  <div className="grid grid-cols-2 gap-2">
-                    {subtypes.map((st) => (
-                      <button key={st.value} type="button" onClick={() => setSubType(st.value)}
-                        className={`rounded-lg border px-3 py-2 text-left text-sm transition-colors ${subType === st.value ? (txType === "inflow" ? "border-green-500 bg-green-500/10 text-green-700 dark:text-green-400" : "border-red-500 bg-red-500/10 text-red-700 dark:text-red-400") : "border-border hover:bg-muted"}`}
-                      >{st.label}</button>
-                    ))}
-                  </div>
-                </div>
-                <div className="grid grid-cols-2 gap-4">
-                  <div className="space-y-2"><Label>Wallet</Label>
-                    <Select name="walletId" required value={selectedWalletId} onValueChange={(v) => { setSelectedWalletId(v); setSelectedSegmentId("") }}>
-                      <SelectTrigger><SelectValue placeholder="Select wallet" /></SelectTrigger>
-                      <SelectContent>{(wallets as Record<string, unknown>[]).map((w) => (<SelectItem key={w.id as string} value={w.id as string}>{w.name as string}</SelectItem>))}</SelectContent>
-                    </Select>
-                  </div>
-                  <div className="space-y-2"><Label>Amount</Label><Input name="amount" type="number" step="0.01" min="0" required /></div>
-                </div>
-
-                {/* Segment picker — shown when selected wallet has segments */}
-                {(() => {
-                  const selWallet = (wallets as Record<string, unknown>[]).find((w) => w.id === selectedWalletId)
-                  const segs = ((selWallet?.segments ?? []) as Record<string, unknown>[])
-                  if (!selWallet || segs.length === 0) return null
-                  return (
-                    <div className="space-y-2">
-                      <Label>Segment <span className="text-xs text-muted-foreground">(optional — deduct from a specific segment)</span></Label>
-                      <Select value={selectedSegmentId} onValueChange={setSelectedSegmentId}>
-                        <SelectTrigger><SelectValue placeholder="No segment (affects whole wallet)" /></SelectTrigger>
-                        <SelectContent>
-                          {segs.map((s) => (
-                            <SelectItem key={s.id as string} value={s.id as string}>
-                              {s.name as string} — {formatCurrency(Number(s.amount))}
-                            </SelectItem>
-                          ))}
-                        </SelectContent>
-                      </Select>
-                    </div>
-                  )
-                })()}
-                <div className="space-y-2"><Label>Description</Label><Input name="description" placeholder="What was this for?" /></div>
-                {subType === "lending" && (<div className="space-y-2"><Label>Person Name <span className="text-xs text-muted-foreground">(a receivable will be created)</span></Label><Input name="personName" placeholder="Who are you lending to?" required /></div>)}
-                {subType === "receivable_collection" && (receivables as Record<string, unknown>[]).filter((r) => r.status !== "settled").length > 0 && (
-                  <div className="space-y-2"><Label>Link to Receivable <span className="text-xs text-muted-foreground">(auto-updates payment)</span></Label>
-                    <Select name="receivableId"><SelectTrigger><SelectValue placeholder="Select receivable (optional)" /></SelectTrigger>
-                      <SelectContent>{(receivables as Record<string, unknown>[]).filter((r) => r.status !== "settled").map((r) => (<SelectItem key={r.id as string} value={r.id as string}>{r.personName as string} — {formatCurrency(Number(r.amount) - Number(r.amountPaid))} remaining</SelectItem>))}</SelectContent>
-                    </Select>
-                  </div>
-                )}
-                {subType === "debt_repayment" && (liabilities as Record<string, unknown>[]).filter((l) => l.status !== "settled").length > 0 && (
-                  <div className="space-y-2"><Label>Link to Liability <span className="text-xs text-muted-foreground">(auto-updates payment)</span></Label>
-                    <Select name="liabilityId"><SelectTrigger><SelectValue placeholder="Select liability (optional)" /></SelectTrigger>
-                      <SelectContent>{(liabilities as Record<string, unknown>[]).filter((l) => l.status !== "settled").map((l) => (<SelectItem key={l.id as string} value={l.id as string}>{l.personName as string} — {formatCurrency(Number(l.amount) - Number(l.amountPaid))} remaining</SelectItem>))}</SelectContent>
-                    </Select>
-                  </div>
-                )}
-                <div className="grid grid-cols-2 gap-4">
-                  <div className="space-y-2"><Label>Date</Label><Input name="date" type="date" required defaultValue={new Date().toISOString().split("T")[0]} /></div>
-                  <div className="space-y-2"><Label>Tag (optional)</Label>
-                    <Select name="categoryId"><SelectTrigger><SelectValue placeholder="None" /></SelectTrigger>
-                      <SelectContent>{(categories as Record<string, string>[]).map((c) => (<SelectItem key={c.id} value={c.id}>{c.name}</SelectItem>))}</SelectContent>
-                    </Select>
-                  </div>
-                </div>
-                <Button type="submit" className="w-full" disabled={createTx.isPending} variant={txType === "inflow" ? "default" : "destructive"}>
-                  {createTx.isPending ? "Adding..." : `Add ${txType === "inflow" ? "Inflow" : "Outflow"}`}
-                </Button>
-              </form>
-            )}
-          </DialogContent>
-        </Dialog>
+        <Button onClick={() => setOpen(true)}><Plus className="mr-2 h-4 w-4" /> Add Transaction</Button>
+        <AddTransactionDialog open={open} onOpenChange={setOpen} />
       </PageHeader>
 
       {txList.length === 0 ? (
@@ -347,16 +209,46 @@ export default function ExpensesPage() {
                       </SelectContent>
                     </Select>
                   </div>
-                  <div className="space-y-1.5">
-                    <Label className="text-xs">Tag</Label>
-                    <Select value={filterCategory} onValueChange={(v) => setFilterCategory(v)}>
-                      <SelectTrigger className="h-9"><SelectValue /></SelectTrigger>
-                      <SelectContent>
-                        <SelectItem value="all">All Tags</SelectItem>
-                        <SelectItem value="none">Untagged</SelectItem>
-                        {(categories as Record<string, string>[]).map((c) => <SelectItem key={c.id} value={c.id}>{c.name}</SelectItem>)}
-                      </SelectContent>
-                    </Select>
+                  <div className="space-y-1.5 md:col-span-2 lg:col-span-2">
+                    <div className="flex items-center justify-between">
+                      <Label className="text-xs">Tags</Label>
+                      {filterCategories.length > 0 && (
+                        <button onClick={() => setFilterCategories([])} className="text-[10px] text-muted-foreground hover:text-foreground">
+                          Clear ({filterCategories.length})
+                        </button>
+                      )}
+                    </div>
+                    <div className="flex flex-wrap gap-1.5">
+                      {/* Untagged chip */}
+                      <button
+                        onClick={() => toggleCategory("none")}
+                        className={cn(
+                          "h-7 rounded-full border px-2.5 text-xs transition-colors",
+                          filterCategories.includes("none")
+                            ? "bg-foreground text-background border-foreground"
+                            : "bg-transparent text-muted-foreground border-border hover:border-foreground hover:text-foreground"
+                        )}
+                      >
+                        Untagged
+                      </button>
+                      {(categories as Record<string, string>[]).map((c) => (
+                        <button
+                          key={c.id}
+                          onClick={() => toggleCategory(c.id)}
+                          className={cn(
+                            "h-7 rounded-full border px-2.5 text-xs transition-colors",
+                            filterCategories.includes(c.id)
+                              ? "bg-primary text-primary-foreground border-primary"
+                              : "bg-transparent text-muted-foreground border-border hover:border-primary/50 hover:text-foreground"
+                          )}
+                        >
+                          {c.name}
+                        </button>
+                      ))}
+                      {(categories as Record<string, string>[]).length === 0 && (
+                        <p className="text-xs text-muted-foreground italic">No tags yet</p>
+                      )}
+                    </div>
                   </div>
                   <div className="space-y-1.5">
                     <Label className="text-xs">Date Range</Label>

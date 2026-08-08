@@ -3,7 +3,7 @@
 import { useState, useEffect } from "react"
 import { useQuery } from "@tanstack/react-query"
 import { useSession } from "next-auth/react"
-import { formatCurrency, formatCompact } from "@/lib/utils"
+import { formatCurrency, formatCompact, formatPercent, cn } from "@/lib/utils"
 import { totalStocksValue } from "@/lib/stocks"
 import { StatCard } from "@/components/shared/stat-card"
 import {
@@ -15,20 +15,11 @@ import {
   TrendingUp,
   TrendingDown,
   DollarSign,
-  ArrowDownLeft,
-  ArrowUpRight,
 } from "lucide-react"
-import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card"
-import { Badge } from "@/components/ui/badge"
+import { Card, CardContent } from "@/components/ui/card"
 import { PageHeader } from "@/components/shared/page-header"
-import { Button } from "@/components/ui/button"
-import { format } from "date-fns"
 import Link from "next/link"
-import { INFLOW_SUBTYPES, OUTFLOW_SUBTYPES } from "@/lib/constants"
-
-const SUBTYPE_LABELS: Record<string, string> = Object.fromEntries(
-  [...INFLOW_SUBTYPES, ...OUTFLOW_SUBTYPES].map((s) => [s.value, s.label])
-)
+import { PieChart, Pie, Cell, Tooltip, ResponsiveContainer } from "recharts"
 
 function useCountUp(target: number, duration = 900) {
   const [current, setCurrent] = useState(0)
@@ -52,15 +43,11 @@ async function fetcher(url: string) {
   return res.json()
 }
 
-type LedgerFilter = "all" | "inflow" | "outflow" | "receivable_collection" | "lending"
-
 export default function DashboardPage() {
   const { data: session } = useSession()
-  const [ledgerFilter, setLedgerFilter] = useState<LedgerFilter>("all")
   const [mounted, setMounted] = useState(false)
   useEffect(() => setMounted(true), [])
 
-  const { data: txData } = useQuery({ queryKey: ["transactions"], queryFn: () => fetcher("/api/expenses/transactions") })
   const { data: receivablesData } = useQuery({ queryKey: ["receivables"], queryFn: () => fetcher("/api/expenses/receivables") })
   const { data: liabilitiesData } = useQuery({ queryKey: ["liabilities"], queryFn: () => fetcher("/api/expenses/liabilities") })
   const { data: insightsData, isLoading } = useQuery({ queryKey: ["insights"], queryFn: () => fetcher("/api/insights") })
@@ -73,7 +60,6 @@ export default function DashboardPage() {
   const sideInvestments = (d.sideInvestments || []) as Record<string, unknown>[]
   const receivables = (receivablesData || []) as Record<string, unknown>[]
   const liabilities = (liabilitiesData || []) as Record<string, unknown>[]
-  const transactions = (txData || []) as Record<string, unknown>[]
 
   const walletBalance = wallets.reduce((sum, w) => sum + Number(w.balance), 0)
   const realEstateValue = properties.reduce((sum, p) => sum + Number(p.currentValue ?? p.totalPrice), 0)
@@ -99,6 +85,22 @@ export default function DashboardPage() {
   const totalAssets = walletBalance + realEstateValue + stocksValue + commoditiesValue + sideValue + receivablesTotal
   const netWorth = totalAssets - liabilitiesTotal
 
+  const stocksInvested = stocks.reduce((sum, s) => {
+    const buyQty = Number(s.quantity)
+    const soldQty = ((s.trades as Record<string, unknown>[] | undefined) ?? []).filter((t) => t.type === "sell").reduce((a, t) => a + Number(t.quantity), 0)
+    return sum + Math.max(0, buyQty - soldQty) * Number(s.avgBuyPrice)
+  }, 0)
+  const commoditiesInvested = commodities.reduce((sum, c) => {
+    return sum + (c.totalCostPaid != null ? Number(c.totalCostPaid) : Number(c.quantity) * Number(c.avgBuyPrice))
+  }, 0)
+  const realEstateInvested = properties.reduce((sum, p) => {
+    const insts = (p.installments as Record<string, unknown>[]) || []
+    const hasDP = insts.some((i) => i.type === "downpayment")
+    const paid = insts.filter((i) => i.status === "paid").reduce((s, i) => s + Number(i.amount), 0)
+    return sum + paid + (hasDP ? 0 : Number(p.downPayment))
+  }, 0)
+  const sideInvested = sideInvestments.filter((s) => s.status === "active").reduce((sum, s) => sum + Number(s.investedAmount), 0)
+
   // Count-up hooks — must be called before any early return
   const animNetWorth = useCountUp(netWorth)
   const animWalletBalance = useCountUp(walletBalance)
@@ -110,24 +112,6 @@ export default function DashboardPage() {
   const animSideValue = useCountUp(sideValue)
 
   if (isLoading) return <div className="p-6">Loading...</div>
-
-  // Filter transactions for ledger
-  const filteredTxs = transactions.filter((tx) => {
-    if (ledgerFilter === "all") return true
-    if (ledgerFilter === "inflow") return tx.type === "inflow"
-    if (ledgerFilter === "outflow") return tx.type === "outflow"
-    if (ledgerFilter === "receivable_collection") return tx.subType === "receivable_collection"
-    if (ledgerFilter === "lending") return tx.subType === "lending"
-    return true
-  })
-
-  const filterLabel: Record<LedgerFilter, string> = {
-    all: "All Transactions",
-    inflow: "Inflows",
-    outflow: "Outflows",
-    receivable_collection: "Receivable Collections",
-    lending: "Lending / Receivables Created",
-  }
 
   return (
     <div>
@@ -144,203 +128,180 @@ export default function DashboardPage() {
           icon={DollarSign}
           gradient={{ from: "from-indigo-500/25", to: "to-violet-500/5", ring: "ring-indigo-500/40", accent: "text-indigo-400" }}
         />
-        <button className="text-left" onClick={() => setLedgerFilter("all")}>
-          <StatCard
-            title="Wallet Balance"
-            value={formatCompact(animWalletBalance)}
-            numericValue={animWalletBalance}
-            subtitle={`${wallets.length} wallet(s)`}
-            icon={Wallet}
-            gradient={{ from: "from-sky-500/25", to: "to-blue-500/5", ring: "ring-sky-500/40", accent: "text-sky-400" }}
-            className={ledgerFilter === "all" ? "ring-2 ring-sky-400" : "hover:ring-2 hover:ring-sky-400/60 transition-all"}
-          />
-        </button>
-        <button className="text-left" onClick={() => setLedgerFilter(ledgerFilter === "receivable_collection" ? "all" : "receivable_collection")}>
-          <StatCard
-            title="Receivables"
-            value={formatCompact(animReceivablesTotal)}
-            numericValue={animReceivablesTotal}
-            subtitle={`${receivables.filter((r) => r.status !== "settled").length} active`}
-            icon={TrendingUp}
-            gradient={{ from: "from-emerald-500/25", to: "to-teal-500/5", ring: "ring-emerald-500/40", accent: "text-emerald-400" }}
-            className={ledgerFilter === "receivable_collection" ? "ring-2 ring-emerald-400" : "hover:ring-2 hover:ring-emerald-400/60 transition-all cursor-pointer"}
-          />
-        </button>
-        <button className="text-left" onClick={() => setLedgerFilter(ledgerFilter === "lending" ? "all" : "lending")}>
-          <StatCard
-            title="Liabilities"
-            value={formatCompact(animLiabilitiesTotal)}
-            numericValue={animLiabilitiesTotal}
-            subtitle={`${liabilities.filter((l) => l.status !== "settled").length} active`}
-            icon={TrendingDown}
-            gradient={{ from: "from-red-500/25", to: "to-rose-500/5", ring: "ring-red-500/40", accent: "text-red-400" }}
-            className={ledgerFilter === "lending" ? "ring-2 ring-red-400" : "hover:ring-2 hover:ring-red-400/60 transition-all cursor-pointer"}
-          />
-        </button>
+        <StatCard
+          title="Wallet Balance"
+          value={formatCompact(animWalletBalance)}
+          numericValue={animWalletBalance}
+          subtitle={`${wallets.length} wallet(s)`}
+          icon={Wallet}
+          gradient={{ from: "from-sky-500/25", to: "to-blue-500/5", ring: "ring-sky-500/40", accent: "text-sky-400" }}
+        />
+        <StatCard
+          title="Receivables"
+          value={formatCompact(animReceivablesTotal)}
+          numericValue={animReceivablesTotal}
+          subtitle={`${receivables.filter((r) => r.status !== "settled").length} active`}
+          icon={TrendingUp}
+          gradient={{ from: "from-emerald-500/25", to: "to-teal-500/5", ring: "ring-emerald-500/40", accent: "text-emerald-400" }}
+        />
+        <StatCard
+          title="Liabilities"
+          value={formatCompact(animLiabilitiesTotal)}
+          numericValue={animLiabilitiesTotal}
+          subtitle={`${liabilities.filter((l) => l.status !== "settled").length} active`}
+          icon={TrendingDown}
+          gradient={{ from: "from-red-500/25", to: "to-rose-500/5", ring: "ring-red-500/40", accent: "text-red-400" }}
+        />
       </div>
 
       <h2 className="text-xl font-semibold mb-4">Investment Breakdown</h2>
       <div className="grid gap-2 sm:gap-3 grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 mb-8">
-        <StatCard
-          title="Real Estate"
-          value={formatCompact(animRealEstateValue)}
-          numericValue={animRealEstateValue}
-          subtitle={`${properties.length} properties`}
-          icon={Building2}
-          gradient={{ from: "from-orange-500/25", to: "to-red-500/5", ring: "ring-orange-500/40", accent: "text-orange-400" }}
-        />
-        <StatCard
-          title="Stocks"
-          value={formatCompact(animStocksValue)}
-          numericValue={animStocksValue}
-          subtitle={`${stocks.length} holdings`}
-          icon={BarChart3}
-          gradient={{ from: "from-purple-500/25", to: "to-fuchsia-500/5", ring: "ring-purple-500/40", accent: "text-purple-400" }}
-        />
-        <StatCard
-          title="Commodities"
-          value={formatCompact(animCommoditiesValue)}
-          numericValue={animCommoditiesValue}
-          subtitle={`${commodities.length} holdings`}
-          icon={Gem}
-          gradient={{ from: "from-yellow-500/25", to: "to-amber-500/5", ring: "ring-yellow-500/40", accent: "text-yellow-400" }}
-        />
-        <StatCard
-          title="Side Investments"
-          value={formatCompact(animSideValue)}
-          numericValue={animSideValue}
-          subtitle={`${sideInvestments.filter((s) => s.status === "active").length} active`}
-          icon={Briefcase}
-          gradient={{ from: "from-pink-500/25", to: "to-rose-500/5", ring: "ring-pink-500/40", accent: "text-pink-400" }}
-        />
+        {[
+          { title: "Real Estate",     href: "/investments/real-estate", icon: Building2, market: animRealEstateValue,  invested: realEstateInvested,  count: `${properties.length} properties`,                                            from: "from-orange-500/25", to: "to-red-500/5",     ring: "ring-orange-500/40", accent: "text-orange-400", noMarket: true },
+          { title: "Stocks",          href: "/investments/stocks",      icon: BarChart3, market: animStocksValue,      invested: stocksInvested,      count: `${stocks.length} holdings`,                                                      from: "from-purple-500/25", to: "to-fuchsia-500/5", ring: "ring-purple-500/40", accent: "text-purple-400", noMarket: false },
+          { title: "Commodities",     href: "/investments/commodities", icon: Gem,       market: animCommoditiesValue, invested: commoditiesInvested, count: `${commodities.length} holdings`,                                                  from: "from-yellow-500/25", to: "to-amber-500/5",   ring: "ring-yellow-500/40", accent: "text-yellow-400", noMarket: false },
+          { title: "Side Investments",href: "/investments/other",       icon: Briefcase, market: animSideValue,        invested: sideInvested,        count: `${sideInvestments.filter((s) => s.status === "active").length} active`,          from: "from-pink-500/25",   to: "to-rose-500/5",    ring: "ring-pink-500/40",   accent: "text-pink-400",  noMarket: false },
+        ].map((item) => {
+          const pnl = item.noMarket ? 0 : item.market - item.invested
+          const pnlPct = item.invested > 0 && !item.noMarket ? (pnl / item.invested) * 100 : 0
+          const gain = pnl >= 0
+          return (
+            <Link key={item.title} href={item.href}>
+            <div className={cn(
+              "relative overflow-hidden rounded-xl border bg-gradient-to-br p-3 sm:p-4 ring-1 cursor-pointer hover:ring-2 transition-all h-full",
+              item.from, item.to, item.ring,
+            )}>
+              <div className="flex items-start justify-between gap-2 mb-2">
+                <div className="min-w-0 flex-1">
+                  <p className="text-[10px] sm:text-xs uppercase tracking-wide text-muted-foreground font-medium">{item.title}</p>
+                  <p className="text-xs text-muted-foreground">{item.count}</p>
+                </div>
+                <div className={cn("rounded-full p-1.5 bg-background/40 shrink-0", item.accent)}>
+                  <item.icon className="h-3.5 w-3.5" />
+                </div>
+              </div>
+              <div className="flex items-baseline gap-2 flex-wrap mb-1">
+                <p className="text-xl font-bold tabular-nums">{formatCompact(item.market)}</p>
+                {!item.noMarket && item.invested > 0 && (
+                  <span className={cn("text-xs font-semibold tabular-nums", gain ? "text-emerald-400" : "text-red-400")}>
+                    {gain ? "+" : ""}{pnlPct.toFixed(1)}%
+                  </span>
+                )}
+              </div>
+              <p className="text-[10px] text-muted-foreground/70 tabular-nums mb-2">{formatCurrency(item.market)}</p>
+              <div className="space-y-0.5 pt-2 border-t border-white/5 text-[11px] tabular-nums">
+                <div className="flex items-center justify-between">
+                  <span className="text-muted-foreground">Invested</span>
+                  <span>{formatCompact(item.invested)}</span>
+                </div>
+                <div className="flex items-center justify-between">
+                  <span className="text-muted-foreground">Market</span>
+                  {item.noMarket
+                    ? <span className="text-muted-foreground/50">–</span>
+                    : <span className={cn(gain ? "text-emerald-400" : "text-red-400")}>{formatCompact(item.market)}</span>
+                  }
+                </div>
+              </div>
+            </div>
+            </Link>
+          )
+        })}
       </div>
 
-      {/* Transactions Ledger */}
+      <h2 className="text-xl font-semibold mb-4">Net Worth Breakdown</h2>
       <Card className="mb-8">
-        <CardHeader className="flex flex-col gap-3 pb-3">
-          <div>
-            <CardTitle className="text-base">{filterLabel[ledgerFilter]}</CardTitle>
-            <p className="text-xs text-muted-foreground mt-1">{filteredTxs.length} transaction(s)</p>
-          </div>
-          <div className="flex items-center justify-between gap-2 flex-wrap">
-            <div className="flex gap-1 flex-wrap">
-              {(["all", "inflow", "outflow"] as LedgerFilter[]).map((f) => (
-                <Button
-                  key={f}
-                  size="sm"
-                  variant={ledgerFilter === f ? "default" : "outline"}
-                  onClick={() => setLedgerFilter(f)}
-                  className="text-xs h-7 px-2.5"
-                >
-                  {f === "all" ? "All" : f === "inflow" ? "Inflows" : "Outflows"}
-                </Button>
-              ))}
-              {ledgerFilter !== "all" && ledgerFilter !== "inflow" && ledgerFilter !== "outflow" && (
-                <Button variant="ghost" size="sm" onClick={() => setLedgerFilter("all")} className="text-xs h-7 px-2.5">
-                  Clear filter
-                </Button>
-              )}
-            </div>
-            <Link href="/expenses">
-              <Button variant="outline" size="sm" className="text-xs h-7 px-2.5">Full view</Button>
-            </Link>
-          </div>
-        </CardHeader>
-        <CardContent>
-          {filteredTxs.length === 0 ? (
-            <p className="text-sm text-muted-foreground text-center py-8">
-              {transactions.length === 0
-                ? <>No transactions yet. <Link href="/expenses/wallets" className="text-primary hover:underline">Add a wallet</Link> to start tracking.</>
-                : "No transactions match the current filter."
-              }
-            </p>
-          ) : (
-            <div className="space-y-2">
-              {filteredTxs.slice(0, 10).map((tx) => (
-                <div key={tx.id as string} className="flex items-center justify-between py-2 border-b last:border-0 gap-2">
-                  <div className="flex items-center gap-3 flex-1 min-w-0">
-                    <div className={`flex h-8 w-8 items-center justify-center rounded-full shrink-0 ${tx.type === "inflow" ? "bg-green-100 dark:bg-green-950" : "bg-red-100 dark:bg-red-950"}`}>
-                      {tx.type === "inflow" ? (
-                        <ArrowDownLeft className="h-4 w-4 text-green-600 dark:text-green-400" />
-                      ) : (
-                        <ArrowUpRight className="h-4 w-4 text-red-600 dark:text-red-400" />
-                      )}
-                    </div>
-                    <div className="min-w-0">
-                      <p className="text-sm font-medium truncate">
-                        {(tx.description as string) || SUBTYPE_LABELS[tx.subType as string] || (tx.type === "inflow" ? "Inflow" : "Outflow")}
-                      </p>
-                      <div className="flex flex-wrap items-center gap-x-1.5 gap-y-0.5 text-xs text-muted-foreground">
-                        <span className="whitespace-nowrap">{(tx.wallet as Record<string, string>)?.name || ""}</span>
-                        <span>·</span>
-                        <span className="whitespace-nowrap">{format(new Date(tx.date as string), "MMM dd, yyyy")}</span>
-                        {tx.subType ? (
-                          <>
-                            <span>·</span>
-                            <Badge variant="outline" className="text-[10px] px-1.5 py-0">{SUBTYPE_LABELS[tx.subType as string] || (tx.subType as string)}</Badge>
-                          </>
-                        ) : null}
-                      </div>
-                    </div>
-                  </div>
-                  <span className={`text-sm font-medium shrink-0 ${tx.type === "inflow" ? "text-green-600" : "text-red-600"}`}>
-                    {tx.type === "inflow" ? "+" : "-"}{formatCurrency(Number(tx.amount))}
-                  </span>
-                </div>
-              ))}
-              {filteredTxs.length > 10 && (
-                <div className="text-center pt-2">
-                  <Link href="/expenses" className="text-xs text-primary hover:underline">
-                    View all {filteredTxs.length} transactions
-                  </Link>
-                </div>
-              )}
-            </div>
-          )}
+        <CardContent className="p-4 sm:p-6">
+          <NetWorthDonut
+            data={[
+              { name: "Cash & Wallets",   value: walletBalance,    color: "#3b82f6" },
+              { name: "Real Estate",      value: realEstateValue,  color: "#f97316" },
+              { name: "Stocks",           value: stocksValue,      color: "#a855f7" },
+              { name: "Commodities",      value: commoditiesValue, color: "#eab308" },
+              { name: "Side Investments", value: sideValue,        color: "#ec4899" },
+              { name: "Receivables",      value: receivablesTotal, color: "#22c55e" },
+            ].filter((d) => d.value > 0)}
+            total={totalAssets}
+            netWorth={netWorth}
+            liabilities={liabilitiesTotal}
+            mounted={mounted}
+          />
         </CardContent>
       </Card>
+    </div>
+  )
+}
 
-      <h2 className="text-xl font-semibold mb-4">Asset Allocation</h2>
-      <Card>
-        <CardHeader>
-          <CardTitle>Portfolio Overview</CardTitle>
-        </CardHeader>
-        <CardContent>
-          <div className="space-y-4">
-            {[
-              { label: "Wallets", value: walletBalance, color: "bg-blue-500" },
-              { label: "Real Estate", value: realEstateValue, color: "bg-green-500" },
-              { label: "Stocks", value: stocksValue, color: "bg-purple-500" },
-              { label: "Commodities", value: commoditiesValue, color: "bg-yellow-500" },
-              { label: "Side Investments", value: sideValue, color: "bg-orange-500" },
-            ].map((item, index) => {
-              const pct = totalAssets > 0 ? (item.value / totalAssets) * 100 : 0
-              return (
-                <div key={item.label} className="space-y-1.5">
-                  <div className="flex items-center gap-2 min-w-0">
-                    <div className={`h-2.5 w-2.5 rounded-full shrink-0 ${item.color}`} />
-                    <span className="text-sm flex-1 truncate">{item.label}</span>
-                    <span className="text-sm font-semibold tabular-nums shrink-0">
-                      {formatCurrency(item.value)}
-                    </span>
-                  </div>
-                  <div className="flex items-center gap-2 pl-4">
-                    <div className="flex-1 h-1.5 bg-muted rounded-full overflow-hidden">
-                      <div
-                        className={`h-full ${item.color} rounded-full transition-all duration-1000 ease-out`}
-                        style={{ width: mounted ? `${pct}%` : "0%", transitionDelay: `${index * 150}ms` }}
-                      />
-                    </div>
-                    <span className="text-[11px] text-muted-foreground tabular-nums shrink-0 w-12 text-right">
-                      {pct.toFixed(1)}%
-                    </span>
-                  </div>
+interface DonutProps {
+  data: Array<{ name: string; value: number; color: string }>
+  total: number
+  netWorth: number
+  liabilities: number
+  mounted: boolean
+}
+
+function NetWorthDonut({ data, total, netWorth, liabilities, mounted }: DonutProps) {
+  const CustomTooltip = ({ active, payload }: { active?: boolean; payload?: Array<{ name: string; value: number; payload: { color: string } }> }) => {
+    if (!active || !payload?.length) return null
+    const item = payload[0]
+    const pct = total > 0 ? ((item.value / total) * 100).toFixed(1) : "0.0"
+    return (
+      <div className="rounded-lg border bg-background/95 backdrop-blur px-3 py-2 text-xs shadow-lg">
+        <div className="flex items-center gap-2 mb-1">
+          <span className="h-2 w-2 rounded-full shrink-0" style={{ background: item.payload.color }} />
+          <span className="font-medium">{item.name}</span>
+        </div>
+        <div className="tabular-nums space-y-0.5 pl-4">
+          <p>{formatCompact(item.value)}</p>
+          <p className="text-muted-foreground">{formatCurrency(item.value)}</p>
+          <p className="text-muted-foreground">{pct}% of assets</p>
+        </div>
+      </div>
+    )
+  }
+  return (
+    <div className="flex flex-col lg:flex-row gap-6 items-center">
+      <div className="relative w-full max-w-[280px] mx-auto lg:mx-0 shrink-0" style={{ height: 280 }}>
+        {mounted && (
+          <ResponsiveContainer width="100%" height="100%">
+            <PieChart>
+              <Pie data={data} cx="50%" cy="50%" innerRadius={75} outerRadius={115} paddingAngle={2} dataKey="value" startAngle={90} endAngle={-270} strokeWidth={0}>
+                {data.map((entry, i) => <Cell key={i} fill={entry.color} opacity={0.9} />)}
+              </Pie>
+              <Tooltip content={<CustomTooltip />} />
+            </PieChart>
+          </ResponsiveContainer>
+        )}
+        <div className="absolute inset-0 flex flex-col items-center justify-center pointer-events-none">
+          <p className="text-[10px] uppercase tracking-wide text-muted-foreground">Net Worth</p>
+          <p className="text-lg font-bold tabular-nums leading-tight">{formatCompact(netWorth)}</p>
+          <p className="text-[10px] text-muted-foreground tabular-nums">{formatCurrency(netWorth)}</p>
+        </div>
+      </div>
+      <div className="flex-1 w-full space-y-2">
+        {data.map((item) => {
+          const pct = total > 0 ? (item.value / total) * 100 : 0
+          return (
+            <div key={item.name} className="space-y-1">
+              <div className="flex items-center gap-2 min-w-0">
+                <span className="h-2.5 w-2.5 rounded-full shrink-0" style={{ background: item.color }} />
+                <span className="text-sm flex-1 truncate">{item.name}</span>
+                <span className="text-sm font-semibold tabular-nums">{formatCompact(item.value)}</span>
+              </div>
+              <div className="flex items-center gap-2 pl-4">
+                <div className="flex-1 h-1.5 bg-muted rounded-full overflow-hidden">
+                  <div className="h-full rounded-full transition-all duration-1000 ease-out" style={{ width: mounted ? `${pct}%` : "0%", background: item.color }} />
                 </div>
-              )
-            })}
-          </div>
-        </CardContent>
-      </Card>
+                <span className="text-[11px] text-muted-foreground tabular-nums shrink-0 w-10 text-right">{pct.toFixed(1)}%</span>
+              </div>
+            </div>
+          )
+        })}
+        <div className="pt-2 border-t space-y-1 text-xs tabular-nums">
+          <div className="flex justify-between text-muted-foreground"><span>Total Assets</span><span className="text-foreground font-medium">{formatCompact(total)}</span></div>
+          <div className="flex justify-between text-muted-foreground"><span>Liabilities</span><span className="text-red-400 font-medium">−{formatCompact(liabilities)}</span></div>
+          <div className="flex justify-between font-semibold pt-1 border-t"><span>Net Worth</span><span className={netWorth >= 0 ? "text-emerald-400" : "text-red-400"}>{formatCompact(netWorth)}</span></div>
+        </div>
+      </div>
     </div>
   )
 }

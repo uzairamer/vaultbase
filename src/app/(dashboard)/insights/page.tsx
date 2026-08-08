@@ -32,7 +32,10 @@ export default function InsightsPage() {
       .filter((t) => t.type === "sell")
       .reduce((a, t) => a + Number(t.quantity), 0)
     const netQty = Math.max(0, buyQty - soldQty)
-    return sum + netQty * Number(c.currentPrice ?? c.avgBuyPrice)
+    const price = c.resolvedPrice != null ? Number(c.resolvedPrice)
+                : c.currentPrice != null  ? Number(c.currentPrice)
+                : Number(c.avgBuyPrice)
+    return sum + netQty * price
   }, 0)
   const sideValue = sideInvestments.filter((s) => s.status === "active").reduce((sum, s) => sum + Number(s.currentValue), 0)
   const receivablesTotal = receivables.filter((r) => r.status !== "settled").reduce((sum, r) => sum + Number(r.amount) - Number(r.amountPaid), 0)

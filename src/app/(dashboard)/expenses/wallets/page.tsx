@@ -9,7 +9,6 @@ import type { WalletStackItem } from "@/modules/expenses/components/wallet-card-
 import { AddTransactionDialog } from "@/modules/expenses/components/add-transaction-dialog"
 import { TransferDialog } from "@/modules/expenses/components/transfer-dialog"
 import { ReconcileDialog } from "@/modules/expenses/components/reconcile-dialog"
-import { PageHeader } from "@/components/shared/page-header"
 import { Button } from "@/components/ui/button"
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogTrigger } from "@/components/ui/dialog"
 import { Input } from "@/components/ui/input"
@@ -197,13 +196,16 @@ export default function WalletsPage() {
 
   return (
     <div>
-      <PageHeader
-        title="Wallets"
-        description={`Total balance: ${formatCurrency(totalBalance)}`}
-      >
+      <div className="mb-6 flex items-center justify-between gap-3">
+        <div className="min-w-0">
+          <h1 className="truncate text-2xl font-bold tracking-tight sm:text-3xl">Wallets</h1>
+          <p className="truncate text-xs text-muted-foreground sm:text-sm">Total balance: {formatCurrency(totalBalance)}</p>
+        </div>
         <Dialog open={open} onOpenChange={setOpen}>
           <DialogTrigger asChild>
-            <Button><Plus className="mr-2 h-4 w-4" /> Add Wallet</Button>
+            <Button size="sm" className="shrink-0 sm:h-9 sm:px-4 sm:py-2 sm:text-sm [&_svg]:size-4">
+              <Plus className="mr-1.5 h-3.5 w-3.5 sm:mr-2" /> Add Wallet
+            </Button>
           </DialogTrigger>
           <DialogContent>
             <DialogHeader>
@@ -239,7 +241,7 @@ export default function WalletsPage() {
             </form>
           </DialogContent>
         </Dialog>
-      </PageHeader>
+      </div>
 
       {/* Transaction Dialog — same redesigned Add Transaction UI used on the Cash Flow page */}
       <AddTransactionDialog

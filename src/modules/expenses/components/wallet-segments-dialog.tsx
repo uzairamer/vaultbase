@@ -158,9 +158,8 @@ function SegmentRow({
         <button
           type="button"
           onClick={onDelete}
-          disabled={!canDelete}
-          title={!canDelete ? "Cannot delete the last segment" : "Delete"}
-          className="flex h-7 w-7 items-center justify-center rounded-full text-[#E5544B] hover:bg-white/[0.06] disabled:cursor-not-allowed disabled:text-[#4E555F]"
+          className="flex h-7 w-7 items-center justify-center rounded-full hover:bg-white/[0.06]"
+          style={{ color: canDelete ? "#E5544B" : "#4E555F" }}
         >
           <Trash2 className="h-3.5 w-3.5" />
         </button>
@@ -238,6 +237,10 @@ export function WalletSegmentsDialog({ open, onOpenChange, walletId, walletName,
   }
 
   function handleDelete(id: string) {
+    if (segments.length <= 1) {
+      toast.error("Every wallet needs at least one segment — add another before removing this one")
+      return
+    }
     deleteSegment.mutate(id, {
       onSuccess: () => toast.success("Segment removed"),
       onError: (err) => toast.error(err.message),

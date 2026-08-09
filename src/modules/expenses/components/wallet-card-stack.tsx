@@ -120,7 +120,7 @@ export function WalletCardStack({
                 key={w.id}
                 ref={(el) => { cardRefs.current[w.id] = el }}
                 onClick={() => scrollToIndex(i)}
-                className="pointer-events-auto absolute inset-x-6 flex cursor-pointer flex-col overflow-hidden rounded-[22px] p-5 text-white will-change-[transform,opacity,filter]"
+                className="pointer-events-auto absolute inset-x-0 flex cursor-pointer flex-col overflow-hidden rounded-[22px] p-5 text-white will-change-[transform,opacity,filter]"
                 style={{
                   top: CARD_TOP, height: CARD_H,
                   background: `linear-gradient(150deg, ${accent.from} 0%, ${accent.to} 55%, #171b21 100%)`,

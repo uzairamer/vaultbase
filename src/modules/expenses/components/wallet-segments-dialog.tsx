@@ -1,15 +1,15 @@
 "use client"
 
 import { useState } from "react"
-import { Dialog, DialogContent, DialogHeader, DialogTitle } from "@/components/ui/dialog"
-import { Button } from "@/components/ui/button"
-import { Input } from "@/components/ui/input"
-import { Label } from "@/components/ui/label"
-import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select"
-import { Trash2, Pencil, Check, X, Plus } from "lucide-react"
-import { formatCurrency } from "@/lib/utils"
-import { useCreateSegment, useUpdateSegment, useDeleteSegment } from "../hooks"
 import { toast } from "sonner"
+import { ChevronLeft, X, Pencil, Trash2, Plus, Check } from "lucide-react"
+import { Dialog, DialogContent, DialogTitle, DialogDescription } from "@/components/ui/dialog"
+import { Sheet, SheetContent, SheetTitle, SheetDescription, SheetClose } from "@/components/ui/sheet"
+import { cn, formatCurrency } from "@/lib/utils"
+import { useCreateSegment, useUpdateSegment, useDeleteSegment } from "@/modules/expenses/hooks"
+import {
+  txSans, txMono, cleanAmount, chevronBg, selectClass, optionStyle, FieldLabel,
+} from "@/modules/expenses/components/wallet-ui-kit"
 
 const RESET_SCHEDULE_OPTIONS = [
   { value: "none", label: "No reset" },
@@ -19,15 +19,10 @@ const RESET_SCHEDULE_OPTIONS = [
 ]
 
 const PRESET_COLORS = [
-  "#6366f1", // indigo
-  "#22c55e", // green
-  "#f59e0b", // amber
-  "#ef4444", // red
-  "#3b82f6", // blue
-  "#ec4899", // pink
-  "#14b8a6", // teal
-  "#f97316", // orange
+  "#6366f1", "#22c55e", "#f59e0b", "#ef4444", "#3b82f6", "#ec4899", "#14b8a6", "#f97316",
 ]
+
+const ACCENT = "#818CF8"
 
 export interface Segment {
   id: string
@@ -48,56 +43,198 @@ interface Props {
   segments: Segment[]
 }
 
+type FormMode = null | "add" | "edit"
+
+function ColorSwatches({ value, onChange }: { value: string; onChange: (c: string) => void }) {
+  return (
+    <div className="flex flex-wrap gap-2">
+      {PRESET_COLORS.map((c) => (
+        <button
+          key={c}
+          type="button"
+          onClick={() => onChange(c)}
+          className="h-7 w-7 shrink-0 rounded-full border-2 transition-transform"
+          style={{ backgroundColor: c, borderColor: value === c ? "#ECEEF1" : "transparent", transform: value === c ? "scale(1.1)" : "scale(1)" }}
+        />
+      ))}
+    </div>
+  )
+}
+
+interface SegmentFormValues {
+  name: string
+  amount: string
+  color: string
+  resetSchedule: string
+  resetAmount: string
+}
+interface SegmentFormProps {
+  values: SegmentFormValues
+  onNameChange: (v: string) => void
+  onAmountChange: (v: string) => void
+  onColorChange: (v: string) => void
+  onResetScheduleChange: (v: string) => void
+  onResetAmountChange: (v: string) => void
+}
+
+function SegmentForm({ values, onNameChange, onAmountChange, onColorChange, onResetScheduleChange, onResetAmountChange }: SegmentFormProps) {
+  return (
+    <div className="flex flex-col gap-5">
+      <div className="flex flex-col gap-[9px]">
+        <FieldLabel>Color</FieldLabel>
+        <ColorSwatches value={values.color} onChange={onColorChange} />
+      </div>
+      <div className="flex flex-col gap-[9px]">
+        <FieldLabel>Name</FieldLabel>
+        <input
+          value={values.name} onChange={(e) => onNameChange(e.target.value)} placeholder="e.g. Groceries"
+          className="w-full rounded-[11px] border border-white/[0.08] bg-[#101317] px-[13px] py-[11px] text-[14.5px] outline-none placeholder:text-[#5C636D]"
+        />
+      </div>
+      <div className="flex flex-col gap-[9px]">
+        <FieldLabel>Amount</FieldLabel>
+        <div className="flex items-center gap-2 rounded-[11px] border border-white/[0.08] bg-[#101317] px-[13px] py-[11px]">
+          <span className="font-mono text-[14.5px] font-medium" style={{ color: values.color, fontFamily: "var(--font-tx-mono)" }}>Rs</span>
+          <input
+            value={values.amount}
+            onChange={(e) => onAmountChange(cleanAmount(e.target.value))}
+            inputMode="decimal"
+            placeholder="0.00"
+            className="min-w-0 flex-1 bg-transparent font-mono text-[14.5px] outline-none"
+            style={{ fontFamily: "var(--font-tx-mono)" }}
+          />
+        </div>
+      </div>
+      <div className="flex flex-col gap-[9px]">
+        <FieldLabel>Reset Schedule</FieldLabel>
+        <select value={values.resetSchedule} onChange={(e) => onResetScheduleChange(e.target.value)} className={selectClass} style={chevronBg}>
+          {RESET_SCHEDULE_OPTIONS.map((o) => (
+            <option key={o.value} value={o.value} style={optionStyle}>{o.label}</option>
+          ))}
+        </select>
+      </div>
+      {values.resetSchedule !== "none" && (
+        <div className="flex flex-col gap-[9px]">
+          <FieldLabel>Reset Amount To</FieldLabel>
+          <input
+            value={values.resetAmount}
+            onChange={(e) => onResetAmountChange(cleanAmount(e.target.value))}
+            inputMode="decimal"
+            placeholder="Leave blank to reset to 0"
+            className="w-full rounded-[11px] border border-white/[0.08] bg-[#101317] px-[13px] py-[11px] font-mono text-[14px] outline-none placeholder:text-[#5C636D]"
+            style={{ fontFamily: "var(--font-tx-mono)" }}
+          />
+        </div>
+      )}
+    </div>
+  )
+}
+
+function SegmentRow({
+  seg, walletBalance, canDelete, onEdit, onDelete,
+}: { seg: Segment; walletBalance: number; canDelete: boolean; onEdit: () => void; onDelete: () => void }) {
+  return (
+    <div className="flex items-center gap-3 rounded-2xl border border-white/[0.08] bg-[#101317] px-4 py-3">
+      <span className="h-3 w-3 shrink-0 rounded-full" style={{ background: seg.color }} />
+      <div className="min-w-0 flex-1">
+        <p className="truncate text-[14.5px] font-medium text-[#ECEEF1]">{seg.name}</p>
+        {seg.resetSchedule && seg.resetSchedule !== "none" && (
+          <p className="truncate text-[11.5px] text-[#6E757F]">
+            Resets {RESET_SCHEDULE_OPTIONS.find((o) => o.value === seg.resetSchedule)?.label.toLowerCase().replace("no reset", "")}
+            {seg.resetAmount != null ? ` → ${formatCurrency(seg.resetAmount)}` : " → 0"}
+          </p>
+        )}
+      </div>
+      <div className="text-right">
+        <p className="font-mono text-[13.5px] font-medium text-[#ECEEF1]" style={{ fontFamily: "var(--font-tx-mono)" }}>{formatCurrency(seg.amount)}</p>
+        <p className="font-mono text-[10.5px] text-[#6E757F]" style={{ fontFamily: "var(--font-tx-mono)" }}>
+          {walletBalance > 0 ? `${Math.round((seg.amount / walletBalance) * 100)}%` : "—"}
+        </p>
+      </div>
+      <div className="flex shrink-0 items-center gap-1">
+        <button type="button" onClick={onEdit} className="flex h-7 w-7 items-center justify-center rounded-full text-[#8B929C] hover:bg-white/[0.06]">
+          <Pencil className="h-3.5 w-3.5" />
+        </button>
+        <button
+          type="button"
+          onClick={onDelete}
+          disabled={!canDelete}
+          title={!canDelete ? "Cannot delete the last segment" : "Delete"}
+          className="flex h-7 w-7 items-center justify-center rounded-full text-[#E5544B] hover:bg-white/[0.06] disabled:cursor-not-allowed disabled:text-[#4E555F]"
+        >
+          <Trash2 className="h-3.5 w-3.5" />
+        </button>
+      </div>
+    </div>
+  )
+}
+
 export function WalletSegmentsDialog({ open, onOpenChange, walletId, walletName, walletBalance, segments }: Props) {
   const createSegment = useCreateSegment()
   const updateSegment = useUpdateSegment()
   const deleteSegment = useDeleteSegment()
 
-  // Add form state
-  const [newName, setNewName] = useState("")
-  const [newAmount, setNewAmount] = useState("")
-  const [newColor, setNewColor] = useState(PRESET_COLORS[1])
-  const [newResetSchedule, setNewResetSchedule] = useState("monthly")
-  const [newResetAmount, setNewResetAmount] = useState("")
-
-  // Edit state
+  const [formMode, setFormMode] = useState<FormMode>(null)
   const [editingId, setEditingId] = useState<string | null>(null)
-  const [editName, setEditName] = useState("")
-  const [editAmount, setEditAmount] = useState("")
-  const [editColor, setEditColor] = useState("")
-  const [editResetSchedule, setEditResetSchedule] = useState("none")
-  const [editResetAmount, setEditResetAmount] = useState("")
+  const [formName, setFormName] = useState("")
+  const [formAmount, setFormAmount] = useState("")
+  const [formColor, setFormColor] = useState(PRESET_COLORS[0])
+  const [formResetSchedule, setFormResetSchedule] = useState("none")
+  const [formResetAmount, setFormResetAmount] = useState("")
 
   const totalAllocated = segments.reduce((sum, s) => sum + s.amount, 0)
   const unallocated = walletBalance - totalAllocated
+  const pending = createSegment.isPending || updateSegment.isPending
 
-  function startEdit(seg: Segment) {
-    setEditingId(seg.id)
-    setEditName(seg.name)
-    setEditAmount(String(seg.amount))
-    setEditColor(seg.color)
-    setEditResetSchedule(seg.resetSchedule ?? "none")
-    setEditResetAmount(seg.resetAmount != null ? String(seg.resetAmount) : "")
+  function handleOpenChange(next: boolean) {
+    onOpenChange(next)
+    if (!next) closeForm()
   }
 
-  function cancelEdit() {
+  function openAdd() {
+    setFormMode("add")
+    setEditingId(null)
+    setFormName("")
+    setFormAmount("")
+    setFormColor(PRESET_COLORS[segments.length % PRESET_COLORS.length])
+    setFormResetSchedule("none")
+    setFormResetAmount("")
+  }
+
+  function openEdit(seg: Segment) {
+    setFormMode("edit")
+    setEditingId(seg.id)
+    setFormName(seg.name)
+    setFormAmount(String(seg.amount))
+    setFormColor(seg.color)
+    setFormResetSchedule(seg.resetSchedule ?? "none")
+    setFormResetAmount(seg.resetAmount != null ? String(seg.resetAmount) : "")
+  }
+
+  function closeForm() {
+    setFormMode(null)
     setEditingId(null)
   }
 
-  function saveEdit(id: string) {
-    const amount = Number(editAmount)
-    if (!editName.trim() || isNaN(amount) || amount < 0) {
+  function handleFormSubmit() {
+    const amount = Number(cleanAmount(formAmount))
+    if (!formName.trim() || isNaN(amount) || amount < 0) {
       toast.error("Enter a valid name and amount")
       return
     }
-    const resetAmount = editResetSchedule !== "none" && editResetAmount !== "" ? Number(editResetAmount) : null
-    updateSegment.mutate(
-      { id, name: editName.trim(), amount, color: editColor, resetSchedule: editResetSchedule, resetAmount },
-      {
-        onSuccess: () => { setEditingId(null); toast.success("Segment updated") },
-        onError: (err) => toast.error(err.message),
-      }
-    )
+    const resetAmount = formResetSchedule !== "none" && formResetAmount !== "" ? Number(cleanAmount(formResetAmount)) : null
+
+    if (formMode === "edit" && editingId) {
+      updateSegment.mutate(
+        { id: editingId, name: formName.trim(), amount, color: formColor, resetSchedule: formResetSchedule, resetAmount },
+        { onSuccess: () => { closeForm(); toast.success("Segment updated") }, onError: (err) => toast.error(err.message) }
+      )
+    } else {
+      createSegment.mutate(
+        { walletId, name: formName.trim(), amount, color: formColor, resetSchedule: formResetSchedule, resetAmount },
+        { onSuccess: () => { closeForm(); toast.success("Segment added") }, onError: (err) => toast.error(err.message) }
+      )
+    }
   }
 
   function handleDelete(id: string) {
@@ -107,248 +244,212 @@ export function WalletSegmentsDialog({ open, onOpenChange, walletId, walletName,
     })
   }
 
-  function handleAdd(e: React.FormEvent) {
-    e.preventDefault()
-    const amount = Number(newAmount)
-    if (!newName.trim() || isNaN(amount) || amount < 0) {
-      toast.error("Enter a valid name and amount")
-      return
-    }
-    const resetAmount = newResetSchedule !== "none" && newResetAmount !== "" ? Number(newResetAmount) : null
-    createSegment.mutate(
-      { walletId, name: newName.trim(), amount, color: newColor, resetSchedule: newResetSchedule, resetAmount },
-      {
-        onSuccess: () => {
-          setNewName("")
-          setNewAmount("")
-          setNewColor(PRESET_COLORS[1])
-          setNewResetSchedule("none")
-          setNewResetAmount("")
-          toast.success("Segment added")
-        },
-        onError: (err) => toast.error(err.message),
-      }
-    )
-  }
-
-  // Build stacked bar data
-  const barSegments = segments.map((s) => ({
-    ...s,
-    pct: walletBalance > 0 ? Math.min((s.amount / walletBalance) * 100, 100) : 0,
-  }))
+  const barSegments = segments.map((s) => ({ ...s, pct: walletBalance > 0 ? Math.min((s.amount / walletBalance) * 100, 100) : 0 }))
+  const formValid = formName.trim().length > 0 && formAmount !== "" && !isNaN(Number(cleanAmount(formAmount)))
+  const formValues: SegmentFormValues = { name: formName, amount: formAmount, color: formColor, resetSchedule: formResetSchedule, resetAmount: formResetAmount }
+  const formTitle = formMode === "edit" ? "Edit Segment" : "Add Segment"
 
   return (
-    <Dialog open={open} onOpenChange={onOpenChange}>
-      <DialogContent className="sm:max-w-2xl">
-        <DialogHeader>
-          <DialogTitle>Segments — {walletName}</DialogTitle>
-        </DialogHeader>
+    <Dialog open={open} onOpenChange={handleOpenChange}>
+      <DialogContent
+        showCloseButton={false}
+        className={cn(
+          txSans.variable, txMono.variable,
+          "gap-0 overflow-hidden border-0 bg-[#08090B] p-0 text-[#ECEEF1]",
+          "inset-0 top-0 left-0 h-[100dvh] w-screen max-w-none translate-x-0 translate-y-0 rounded-none",
+          "sm:inset-auto sm:top-1/2 sm:left-1/2 sm:h-auto sm:max-h-[90vh] sm:w-full sm:max-w-[620px] sm:-translate-x-1/2 sm:-translate-y-1/2 sm:rounded-[20px] sm:border sm:border-white/[0.08] sm:bg-[#0B0D10]"
+        )}
+        style={{ fontFamily: "var(--font-tx-sans)" }}
+      >
+        <DialogTitle className="sr-only">Segments — {walletName}</DialogTitle>
+        <DialogDescription className="sr-only">Manage budget segments for this wallet</DialogDescription>
 
-        {/* Balance summary */}
-        <div className="flex items-center justify-between text-sm rounded-lg bg-muted/50 px-4 py-3">
-          <span className="text-muted-foreground">Wallet balance</span>
-          <span className="font-semibold tabular-nums">{formatCurrency(walletBalance)}</span>
-        </div>
+        {/* MOBILE */}
+        <div className="flex h-full flex-col sm:hidden">
+          <div className="flex h-[52px] shrink-0 items-center justify-between px-1.5 pl-2">
+            <button type="button" onClick={() => handleOpenChange(false)} className="flex min-h-11 min-w-11 items-center gap-0.5 pl-0.5" style={{ color: ACCENT }}>
+              <ChevronLeft className="h-5 w-5" />
+            </button>
+            <div className="text-[16px] font-semibold">Segments</div>
+            <button type="button" onClick={() => handleOpenChange(false)} className="flex min-h-11 min-w-11 items-center justify-center text-[#8B929C]">
+              <X className="h-[19px] w-[19px]" />
+            </button>
+          </div>
 
-        {/* Stacked bar */}
-        {segments.length > 0 && (
-          <div className="space-y-1.5">
-            <div className="flex h-3 w-full overflow-hidden rounded-full bg-muted">
-              {barSegments.map((s) => (
-                <div
-                  key={s.id}
-                  style={{ width: `${s.pct}%`, backgroundColor: s.color }}
-                  className="h-full transition-all"
-                  title={`${s.name}: ${formatCurrency(s.amount)}`}
+          <div className="min-h-0 flex-1 overflow-y-auto px-4 pb-6">
+            <div className="rounded-2xl border border-white/[0.08] bg-[#101317] p-4">
+              <div className="flex items-center justify-between">
+                <span className="text-[13px] text-[#8B929C]">{walletName}</span>
+                <span className="font-mono text-[15px] font-semibold" style={{ fontFamily: "var(--font-tx-mono)" }}>{formatCurrency(walletBalance)}</span>
+              </div>
+              {segments.length > 0 && (
+                <div className="mt-3 flex h-1.5 w-full overflow-hidden rounded-full bg-white/[0.08]">
+                  {barSegments.map((s) => (
+                    <div key={s.id} style={{ width: `${s.pct}%`, background: s.color }} className="h-full" />
+                  ))}
+                </div>
+              )}
+              <div className="mt-2.5 flex items-center justify-between text-[11.5px]">
+                <span className="text-[#8B929C]">Allocated <span className="font-medium text-[#ECEEF1]">{formatCurrency(totalAllocated)}</span></span>
+                <span style={{ color: unallocated < 0 ? "#E5544B" : "#6E757F" }}>
+                  {unallocated < 0 ? `Over by ${formatCurrency(Math.abs(unallocated))}` : `${formatCurrency(unallocated)} left`}
+                </span>
+              </div>
+            </div>
+
+            <div className="mt-4 flex flex-col gap-2">
+              {segments.map((seg) => (
+                <SegmentRow
+                  key={seg.id} seg={seg} walletBalance={walletBalance}
+                  canDelete={segments.length > 1}
+                  onEdit={() => openEdit(seg)}
+                  onDelete={() => handleDelete(seg.id)}
                 />
               ))}
             </div>
-            <div className="flex flex-wrap gap-x-3 gap-y-1">
-              {segments.map((s) => (
-                <span key={s.id} className="flex items-center gap-1 text-xs text-muted-foreground">
-                  <span className="h-2 w-2 rounded-full shrink-0" style={{ backgroundColor: s.color }} />
-                  {s.name}
-                </span>
-              ))}
-            </div>
           </div>
-        )}
 
-        {/* Allocation status */}
-        <div className="flex items-center justify-between text-xs">
-          <span className="text-muted-foreground">
-            Allocated: <span className="font-medium text-foreground tabular-nums">{formatCurrency(totalAllocated)}</span>
-          </span>
-          <span className={unallocated < 0 ? "text-red-500 font-medium tabular-nums" : "text-muted-foreground tabular-nums"}>
-            {unallocated < 0 ? `Over by ${formatCurrency(Math.abs(unallocated))}` : `${formatCurrency(unallocated)} unallocated`}
-          </span>
+          <div className="shrink-0 px-4 pt-2 pb-[calc(20px+env(safe-area-inset-bottom,0px))]">
+            <button
+              type="button" onClick={openAdd}
+              className="flex min-h-[54px] w-full items-center justify-center gap-2 rounded-2xl text-[16.5px] font-semibold"
+              style={{ background: ACCENT, color: "#0B0D10" }}
+            >
+              <Plus className="h-4 w-4" /> Add Segment
+            </button>
+          </div>
         </div>
 
-        {/* Segment list */}
-        <div className="space-y-1.5 max-h-56 overflow-y-auto pr-1">
-          {segments.map((seg) =>
-            editingId === seg.id ? (
-              <div key={seg.id} className="space-y-2 rounded-lg border bg-muted/30 p-3">
-                {/* Row 1: color + name + amount + actions */}
-                <div className="flex items-center gap-2">
-                  <div className="flex gap-1 shrink-0">
-                    {PRESET_COLORS.map((c) => (
-                      <button
-                        key={c}
-                        type="button"
-                        onClick={() => setEditColor(c)}
-                        className={`h-4 w-4 rounded-full border-2 transition-transform ${editColor === c ? "border-foreground scale-110" : "border-transparent"}`}
-                        style={{ backgroundColor: c }}
-                      />
+        {/* DESKTOP */}
+        <div className="hidden sm:flex sm:flex-col">
+          <div className="flex items-center justify-between gap-4 border-b border-white/[0.06] px-6 py-5">
+            <div className="flex flex-col gap-0.5">
+              <div className="text-[19px] font-semibold tracking-[-0.01em]">Segments</div>
+              <div className="text-[13px] text-[#8B929C]">{walletName} · {formatCurrency(walletBalance)}</div>
+            </div>
+            <button
+              type="button" onClick={() => handleOpenChange(false)}
+              className="flex h-[34px] w-[34px] items-center justify-center rounded-[9px] border border-white/[0.07] bg-[#15181D] text-[#8B929C]"
+            >
+              <X className="h-4 w-4" />
+            </button>
+          </div>
+
+          <div className="flex max-h-[60vh] flex-col gap-4 overflow-y-auto px-6 py-[22px]">
+            {formMode ? (
+              <>
+                <button type="button" onClick={closeForm} className="flex w-fit items-center gap-1.5 text-[13px] text-[#8B929C] hover:text-[#ECEEF1]">
+                  <ChevronLeft className="h-3.5 w-3.5" /> Back to segments
+                </button>
+                <div className="text-[15px] font-semibold">{formTitle}</div>
+                <SegmentForm
+                  values={formValues}
+                  onNameChange={setFormName}
+                  onAmountChange={setFormAmount}
+                  onColorChange={setFormColor}
+                  onResetScheduleChange={setFormResetSchedule}
+                  onResetAmountChange={setFormResetAmount}
+                />
+              </>
+            ) : (
+              <>
+                {segments.length > 0 && (
+                  <div className="flex h-1.5 w-full overflow-hidden rounded-full bg-white/[0.08]">
+                    {barSegments.map((s) => (
+                      <div key={s.id} style={{ width: `${s.pct}%`, background: s.color }} className="h-full" />
                     ))}
                   </div>
-                  <Input
-                    value={editName}
-                    onChange={(e) => setEditName(e.target.value)}
-                    className="h-7 text-sm flex-1 min-w-0"
-                  />
-                  <Input
-                    type="number"
-                    value={editAmount}
-                    onChange={(e) => setEditAmount(e.target.value)}
-                    className="h-7 text-sm w-24"
-                    step="0.01"
-                    min="0"
-                  />
-                  <button onClick={() => saveEdit(seg.id)} className="text-green-500 hover:text-green-400 shrink-0" title="Save">
-                    <Check className="h-4 w-4" />
-                  </button>
-                  <button onClick={cancelEdit} className="text-muted-foreground hover:text-foreground shrink-0" title="Cancel">
-                    <X className="h-4 w-4" />
-                  </button>
+                )}
+                <div className="flex items-center justify-between text-[12px]">
+                  <span className="text-[#8B929C]">Allocated <span className="font-medium text-[#ECEEF1]">{formatCurrency(totalAllocated)}</span></span>
+                  <span style={{ color: unallocated < 0 ? "#E5544B" : "#6E757F" }}>
+                    {unallocated < 0 ? `Over by ${formatCurrency(Math.abs(unallocated))}` : `${formatCurrency(unallocated)} unallocated`}
+                  </span>
                 </div>
-                {/* Row 2: reset schedule */}
-                <div className="space-y-2">
-                  <Label className="text-xs font-medium text-muted-foreground">Reset Schedule</Label>
-                  <Select value={editResetSchedule} onValueChange={setEditResetSchedule}>
-                    <SelectTrigger className="h-9 text-sm w-full">
-                      <SelectValue />
-                    </SelectTrigger>
-                    <SelectContent>
-                      {RESET_SCHEDULE_OPTIONS.map((o) => (
-                        <SelectItem key={o.value} value={o.value}>{o.label}</SelectItem>
-                      ))}
-                    </SelectContent>
-                  </Select>
-                  {editResetSchedule !== "none" && (
-                    <div className="space-y-1">
-                      <Label className="text-xs text-muted-foreground">Reset segment amount to</Label>
-                      <Input
-                        type="number"
-                        value={editResetAmount}
-                        onChange={(e) => setEditResetAmount(e.target.value)}
-                        placeholder="Leave blank to reset to 0"
-                        className="h-9 text-sm w-full"
-                        step="0.01"
-                        min="0"
-                      />
-                    </div>
-                  )}
-                </div>
-              </div>
-            ) : (
-              <div key={seg.id} className="flex items-center gap-3 rounded-lg border px-3 py-2 group">
-                <span className="h-3 w-3 rounded-full shrink-0" style={{ backgroundColor: seg.color }} />
-                <div className="flex-1 min-w-0">
-                  <span className="text-sm font-medium truncate block">{seg.name}</span>
-                  {seg.resetSchedule && seg.resetSchedule !== "none" && (
-                    <span className="text-xs text-muted-foreground">
-                      Resets {RESET_SCHEDULE_OPTIONS.find(o => o.value === seg.resetSchedule)?.label?.toLowerCase().replace("no reset", "")}
-                      {seg.resetAmount != null ? ` → ${formatCurrency(seg.resetAmount)}` : " → 0"}
-                    </span>
-                  )}
-                </div>
-                <span className="text-sm tabular-nums text-muted-foreground">{formatCurrency(seg.amount)}</span>
-                <span className="text-xs text-muted-foreground w-10 text-right tabular-nums">
-                  {walletBalance > 0 ? `${Math.round((seg.amount / walletBalance) * 100)}%` : "—"}
-                </span>
-                <div className="flex items-center gap-0.5 opacity-0 group-hover:opacity-100 transition-opacity">
-                  <button onClick={() => startEdit(seg)} className="p-1 rounded hover:bg-muted" title="Edit">
-                    <Pencil className="h-3.5 w-3.5 text-muted-foreground" />
-                  </button>
-                  <button
-                    onClick={() => handleDelete(seg.id)}
-                    className="p-1 rounded hover:bg-muted"
-                    title={segments.length === 1 ? "Cannot delete the last segment" : "Delete"}
-                    disabled={segments.length === 1}
-                  >
-                    <Trash2 className={`h-3.5 w-3.5 ${segments.length === 1 ? "text-muted-foreground/30" : "text-red-400"}`} />
-                  </button>
-                </div>
-              </div>
-            )
-          )}
-        </div>
-
-        {/* Add segment form */}
-        <form onSubmit={handleAdd} className="space-y-3 border-t pt-3">
-          <Label className="text-xs font-medium text-muted-foreground uppercase tracking-wide">Add Segment</Label>
-          <div className="flex gap-1">
-            {PRESET_COLORS.map((c) => (
-              <button
-                key={c}
-                type="button"
-                onClick={() => setNewColor(c)}
-                className={`h-5 w-5 rounded-full border-2 transition-transform ${newColor === c ? "border-foreground scale-110" : "border-transparent"}`}
-                style={{ backgroundColor: c }}
-              />
-            ))}
-          </div>
-          <div className="flex gap-2">
-            <Input
-              placeholder="Name (e.g. Groceries)"
-              value={newName}
-              onChange={(e) => setNewName(e.target.value)}
-              className="flex-1"
-              required
-            />
-            <Input
-              type="number"
-              placeholder="Amount"
-              value={newAmount}
-              onChange={(e) => setNewAmount(e.target.value)}
-              className="w-32"
-              step="0.01"
-              min="0"
-              required
-            />
-            <Button type="submit" size="sm" disabled={createSegment.isPending}>
-              <Plus className="h-4 w-4" />
-            </Button>
-          </div>
-          <div className="space-y-2 rounded-lg border border-dashed border-muted-foreground/30 p-3">
-            <Label className="text-xs font-medium text-muted-foreground">Reset Schedule</Label>
-            <Select value={newResetSchedule} onValueChange={setNewResetSchedule}>
-              <SelectTrigger className="h-9 text-sm w-full">
-                <SelectValue />
-              </SelectTrigger>
-              <SelectContent>
-                {RESET_SCHEDULE_OPTIONS.map((o) => (
-                  <SelectItem key={o.value} value={o.value}>{o.label}</SelectItem>
-                ))}
-              </SelectContent>
-            </Select>
-            {newResetSchedule !== "none" && (
-              <div className="space-y-1">
-                <Label className="text-xs text-muted-foreground">Reset segment amount to</Label>
-                <Input
-                  type="number"
-                  value={newResetAmount}
-                  onChange={(e) => setNewResetAmount(e.target.value)}
-                  placeholder="Leave blank to reset to 0"
-                  className="h-9 text-sm w-full"
-                  step="0.01"
-                  min="0"
+                <div className="flex flex-col gap-2">
+                  {segments.map((seg) => (
+                <SegmentRow
+                  key={seg.id} seg={seg} walletBalance={walletBalance}
+                  canDelete={segments.length > 1}
+                  onEdit={() => openEdit(seg)}
+                  onDelete={() => handleDelete(seg.id)}
                 />
-              </div>
+              ))}
+                </div>
+              </>
             )}
           </div>
-        </form>
+
+          <div className="flex flex-wrap items-center justify-end gap-2.5 border-t border-white/[0.06] bg-[#0A0C0F] px-6 py-4">
+            {formMode ? (
+              <>
+                <button type="button" onClick={closeForm} className="rounded-[11px] border border-white/[0.08] bg-[#15181D] px-[18px] py-[11px] text-[14px] text-[#B9C0C9]">
+                  Cancel
+                </button>
+                <button
+                  type="button" onClick={handleFormSubmit} disabled={!formValid || pending}
+                  className="rounded-[11px] px-[22px] py-[11px] text-[14.5px] font-semibold"
+                  style={{ background: ACCENT, color: "#0B0D10", opacity: formValid ? 1 : 0.45 }}
+                >
+                  {pending ? "Saving..." : formMode === "edit" ? "Save Changes" : "Add Segment"}
+                </button>
+              </>
+            ) : (
+              <button
+                type="button" onClick={openAdd}
+                className="flex items-center gap-2 rounded-[11px] px-[18px] py-[11px] text-[14.5px] font-semibold"
+                style={{ background: ACCENT, color: "#0B0D10" }}
+              >
+                <Plus className="h-4 w-4" /> Add Segment
+              </button>
+            )}
+          </div>
+        </div>
+
+        {/* MOBILE ADD/EDIT SHEET */}
+        <Sheet open={formMode !== null} onOpenChange={(o) => { if (!o) closeForm() }}>
+          <SheetContent
+            side="bottom" showCloseButton={false}
+            className={cn(txSans.variable, txMono.variable, "flex max-h-[85vh] flex-col gap-0 rounded-t-[20px] border border-b-0 border-white/[0.09] bg-[#111418] p-0 sm:hidden")}
+            style={{ fontFamily: "var(--font-tx-sans)" }}
+          >
+            <div className="flex shrink-0 justify-center pt-2.5 pb-1">
+              <div className="h-1 w-9 rounded-full bg-white/[0.18]" />
+            </div>
+            <div className="flex shrink-0 items-center justify-between gap-3 px-[18px] pt-1.5 pb-3.5">
+              <SheetTitle className="text-[16px] font-semibold text-[#ECEEF1]">{formTitle}</SheetTitle>
+              <SheetClose className="flex h-9 w-9 items-center justify-center rounded-full bg-[#1B1F25] text-[#8B929C]">
+                <X className="h-3.5 w-3.5" />
+              </SheetClose>
+            </div>
+            <SheetDescription className="sr-only">{formTitle}</SheetDescription>
+
+            <div className="min-h-0 flex-1 overflow-y-auto px-[18px] pb-4">
+              <SegmentForm
+                  values={formValues}
+                  onNameChange={setFormName}
+                  onAmountChange={setFormAmount}
+                  onColorChange={setFormColor}
+                  onResetScheduleChange={setFormResetSchedule}
+                  onResetAmountChange={setFormResetAmount}
+                />
+            </div>
+
+            <div className="shrink-0 px-[18px] pt-2 pb-[calc(18px+env(safe-area-inset-bottom,0px))]">
+              <button
+                type="button" onClick={handleFormSubmit} disabled={!formValid || pending}
+                className="flex min-h-[52px] w-full items-center justify-center gap-2 rounded-2xl text-[15.5px] font-semibold"
+                style={{ background: ACCENT, color: "#0B0D10", opacity: formValid ? 1 : 0.45 }}
+              >
+                {pending ? "Saving..." : (
+                  <>
+                    <Check className="h-4 w-4" /> {formMode === "edit" ? "Save Changes" : "Add Segment"}
+                  </>
+                )}
+              </button>
+            </div>
+          </SheetContent>
+        </Sheet>
       </DialogContent>
     </Dialog>
   )

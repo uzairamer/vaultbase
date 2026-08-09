@@ -38,7 +38,7 @@ export interface WalletStackItem {
   _count?: { transactions?: number }
 }
 
-const CONTAINER_H = 400
+const CONTAINER_H = 380
 const CARD_H = 256
 const STEP = 112
 const CARD_TOP = 64
@@ -104,7 +104,7 @@ export function WalletCardStack({
       <div
         ref={containerRef}
         onScroll={handleScroll}
-        className="wallet-stack-scroller snap-y snap-mandatory overflow-x-hidden overflow-y-scroll rounded-[28px] border border-white/10 bg-gradient-to-b from-[#1c2027] to-[#0b0d10]"
+        className="wallet-stack-scroller snap-y snap-mandatory overflow-x-hidden overflow-y-scroll"
         style={{ height: CONTAINER_H, scrollbarWidth: "none" }}
       >
         <div className="sticky top-0 z-0 h-0 pointer-events-none">

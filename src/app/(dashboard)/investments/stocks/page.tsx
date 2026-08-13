@@ -3,6 +3,7 @@
 import { useState, useMemo, useEffect, useRef } from "react"
 import { useStocks, useCreateStock, useDeleteStock, useSellStock, useSyncStockPrices } from "@/modules/investments/hooks"
 import { InvestmentArchiveDialog } from "@/modules/investments/components/archive-dialog"
+import { SellAllStocksDialog } from "@/modules/investments/components/sell-all-stocks-dialog"
 import { ConfirmDeleteDialog } from "@/components/shared/confirm-delete-dialog"
 import { useWallets } from "@/modules/expenses/hooks"
 import { useLivePrices } from "@/modules/insights/hooks"
@@ -16,7 +17,7 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@
 import { EmptyState } from "@/components/shared/empty-state"
 import { DataTable } from "@/components/shared/data-table"
 import { Badge } from "@/components/ui/badge"
-import { Plus, BarChart3, Trash2, TrendingDown, Archive } from "lucide-react"
+import { Plus, BarChart3, Trash2, TrendingDown, Archive, Banknote } from "lucide-react"
 import { cn, formatCurrency, formatPercent } from "@/lib/utils"
 import { type ColumnDef } from "@tanstack/react-table"
 import { format } from "date-fns"
@@ -51,6 +52,7 @@ export default function StocksPage() {
 
   const [addOpen, setAddOpen] = useState(false)
   const [sellOpen, setSellOpen] = useState(false)
+  const [sellAllOpen, setSellAllOpen] = useState(false)
   const [archiveOpen, setArchiveOpen] = useState(false)
   const [deleteStockId, setDeleteStockId] = useState<string | null>(null)
   const [deleteStockName, setDeleteStockName] = useState("")
@@ -111,6 +113,16 @@ export default function StocksPage() {
     () => Array.from(aggregatedQty.entries()).filter(([, qty]) => qty > 0).map(([sym]) => sym).sort(),
     [aggregatedQty]
   )
+
+  const openLotCount = useMemo(() => {
+    return stockList.filter((s) => {
+      const buyQty = Number(s.quantity)
+      const soldQty = ((s.trades as Record<string, unknown>[]) ?? [])
+        .filter((t) => t.type === "sell")
+        .reduce((a, t) => a + Number(t.quantity), 0)
+      return buyQty - soldQty > 0
+    }).length
+  }, [stockList])
 
   const unifiedData = useMemo((): UnifiedRow[] => {
     const rows: UnifiedRow[] = []
@@ -350,6 +362,13 @@ export default function StocksPage() {
               <Archive className="mr-2 h-4 w-4" />
               <span className="hidden sm:inline">Archive All</span>
               <span className="sm:hidden">Archive</span>
+            </Button>
+          )}
+          {heldSymbols.length > 0 && (
+            <Button variant="outline" className="text-blue-600 border-blue-200 hover:bg-blue-50 dark:border-blue-900 dark:hover:bg-blue-950" onClick={() => setSellAllOpen(true)}>
+              <Banknote className="mr-2 h-4 w-4" />
+              <span className="hidden sm:inline">Sell Complete Portfolio</span>
+              <span className="sm:hidden">Sell All</span>
             </Button>
           )}
           {heldSymbols.length > 0 && (
@@ -669,6 +688,13 @@ export default function StocksPage() {
         onOpenChange={setArchiveOpen}
         type="stocks"
         itemCount={(stocks as Record<string, unknown>[]).length}
+      />
+      <SellAllStocksDialog
+        open={sellAllOpen}
+        onOpenChange={setSellAllOpen}
+        symbols={heldSymbols}
+        lotCount={openLotCount}
+        wallets={walletList as unknown as { id: string; name: string; segments?: { id: string; name: string }[] }[]}
       />
     </div>
   )

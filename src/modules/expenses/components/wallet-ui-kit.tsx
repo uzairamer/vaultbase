@@ -99,7 +99,11 @@ export function SimpleListRow({
   )
 }
 
-const WALLET_COLORS = ["#818CF8", "#38BDF8", "#34D399", "#FBBF24", "#F472B6", "#94A3B8"]
+const WALLET_COLORS = [
+  "#818CF8", "#38BDF8", "#34D399", "#FBBF24", "#F472B6", "#94A3B8",
+  "#2DD4BF", "#FB923C", "#A78BFA", "#A3E635", "#FB7185", "#22D3EE",
+  "#E879F9", "#FACC15", "#60A5FA", "#F87171",
+]
 export function walletColor(name: string) {
   let hash = 0
   for (let i = 0; i < name.length; i++) hash = name.charCodeAt(i) + ((hash << 5) - hash)

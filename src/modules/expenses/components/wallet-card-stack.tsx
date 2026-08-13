@@ -6,7 +6,8 @@ import { formatCurrency } from "@/lib/utils"
 import { WALLET_TYPES } from "@/lib/constants"
 
 // Muted, low-saturation tones — read as premium bank-card material rather than app-icon brights,
-// but bright enough to stay legible against the dark stage behind them.
+// but bright enough to stay legible against the dark stage behind them. A larger set keeps
+// same-name-hash collisions rare enough that most real wallet lists get a fully distinct card each.
 const CARD_ACCENTS = [
   { from: "#3f6a95", to: "#1c3350" }, // navy
   { from: "#5a616c", to: "#2a2f37" }, // graphite
@@ -14,6 +15,16 @@ const CARD_ACCENTS = [
   { from: "#7a3f52", to: "#3a1f28" }, // wine
   { from: "#7a5c37", to: "#3a2c1c" }, // bronze
   { from: "#48566c", to: "#212832" }, // slate blue
+  { from: "#3f7a72", to: "#1c3a35" }, // teal
+  { from: "#8a6a3a", to: "#40311b" }, // amber-brown
+  { from: "#5a5a9a", to: "#2a2a4a" }, // indigo
+  { from: "#6a4a7a", to: "#32233a" }, // plum
+  { from: "#6a7a3f", to: "#32391c" }, // olive
+  { from: "#4a6a7a", to: "#22323a" }, // steel
+  { from: "#8a4a3a", to: "#40231c" }, // rust
+  { from: "#557a4a", to: "#283a22" }, // moss
+  { from: "#3a4a6a", to: "#1c2332" }, // charcoal blue
+  { from: "#7a4a5a", to: "#3a2229" }, // mauve
 ]
 function cardAccent(name: string) {
   let hash = 0

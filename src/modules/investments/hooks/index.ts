@@ -177,6 +177,20 @@ export function useSellStock() {
   })
 }
 
+export function useSellAllStocks() {
+  const qc = useQueryClient()
+  return useMutation({
+    mutationFn: (data: Record<string, unknown>) =>
+      mutator("/api/investments/stocks/sell-all", { method: "POST", body: JSON.stringify(data) }),
+    onSuccess: () => {
+      qc.invalidateQueries({ queryKey: ["stocks"] })
+      qc.invalidateQueries({ queryKey: ["wallets"] })
+      qc.invalidateQueries({ queryKey: ["insights"] })
+      qc.invalidateQueries({ queryKey: ["financial-report"] })
+    },
+  })
+}
+
 // Commodities
 export function useCommodities() {
   return useQuery({ queryKey: ["commodities"], queryFn: () => fetcher("/api/investments/commodities") })

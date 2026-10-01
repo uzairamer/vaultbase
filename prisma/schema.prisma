@@ -10,13 +10,13 @@ datasource db {
 // ─── AUTH ────────────────────────────────────────────────────────────────────
 
 model User {
-  id            String    @id @default(cuid())
-  name          String?
-  email         String    @unique
-  passwordHash  String?
-  image         String?
-  createdAt     DateTime  @default(now())
-  updatedAt     DateTime  @updatedAt
+  id           String   @id @default(cuid())
+  name         String?
+  email        String   @unique
+  passwordHash String?
+  image        String?
+  createdAt    DateTime @default(now())
+  updatedAt    DateTime @updatedAt
 
   accounts        Account[]
   sessions        Session[]
@@ -35,6 +35,7 @@ model User {
   incomeBreakdown IncomeBreakdown[]
   staticPrices    StaticPrice[]
   businesses      Business[]
+  monthlyClosings WalletMonthlyClosing[]
 }
 
 model Account {
@@ -79,49 +80,72 @@ model Wallet {
   id        String   @id @default(cuid())
   userId    String
   name      String
-  type      String   // bank, cash, digital_wallet, other
+  type      String // bank, cash, digital_wallet, other
   bankName  String?
   balance   Decimal  @db.Decimal(15, 2)
   currency  String   @default("PKR")
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt
 
-  user         User            @relation(fields: [userId], references: [id], onDelete: Cascade)
-  transactions Transaction[]
-  segments     WalletSegment[]
+  user            User                   @relation(fields: [userId], references: [id], onDelete: Cascade)
+  transactions    Transaction[]
+  segments        WalletSegment[]
+  monthlyClosings WalletMonthlyClosing[]
+}
+
+model WalletMonthlyClosing {
+  id             String   @id @default(cuid())
+  userId         String
+  walletId       String
+  year           Int
+  month          Int // 1-12
+  openingBalance Decimal  @db.Decimal(15, 2)
+  closingBalance Decimal  @db.Decimal(15, 2)
+  income         Decimal  @default(0) @db.Decimal(15, 2) // logged inflows, excluding transfers in
+  transfersIn    Decimal  @default(0) @db.Decimal(15, 2)
+  transfersOut   Decimal  @default(0) @db.Decimal(15, 2)
+  trackedSpend   Decimal  @default(0) @db.Decimal(15, 2) // logged outflows, excluding transfers out
+  residual       Decimal  @default(0) @db.Decimal(15, 2) // positive = untracked spend, negative = unexplained net inflow
+  note           String?
+  closedAt       DateTime @default(now())
+
+  user   User   @relation(fields: [userId], references: [id], onDelete: Cascade)
+  wallet Wallet @relation(fields: [walletId], references: [id], onDelete: Cascade)
+
+  @@unique([walletId, year, month])
 }
 
 model WalletSegment {
-  id              String    @id @default(cuid())
-  userId          String
-  walletId        String
-  name            String
-  amount          Decimal   @db.Decimal(15, 2) @default(0)
-  color           String    @default("#6366f1")
-  isDefault       Boolean   @default(false)
-  resetSchedule   String    @default("none") // none | weekly | monthly | quarterly
-  resetAmount     Decimal?  @db.Decimal(15, 2) // amount to reset to (null = reset to 0)
-  lastResetAt     DateTime?
-  createdAt       DateTime  @default(now())
-  updatedAt       DateTime  @updatedAt
+  id            String    @id @default(cuid())
+  userId        String
+  walletId      String
+  name          String
+  amount        Decimal   @default(0) @db.Decimal(15, 2)
+  color         String    @default("#6366f1")
+  isDefault     Boolean   @default(false)
+  resetSchedule String    @default("none") // none | weekly | monthly | quarterly
+  resetAmount   Decimal?  @db.Decimal(15, 2) // amount to reset to (null = reset to 0)
+  lastResetAt   DateTime?
+  createdAt     DateTime  @default(now())
+  updatedAt     DateTime  @updatedAt
 
   user   User   @relation(fields: [userId], references: [id], onDelete: Cascade)
   wallet Wallet @relation(fields: [walletId], references: [id], onDelete: Cascade)
 }
 
 model Transaction {
-  id          String   @id @default(cuid())
+  id          String    @id @default(cuid())
   userId      String
   walletId    String
   categoryId  String?
-  type        String   // inflow, outflow
-  subType     String?  // earned_income, passive_income, receivable_collection, other_inflow, fixed_expense, variable_expense, lending, debt_repayment, savings_investment
-  amount      Decimal  @db.Decimal(15, 2)
+  type        String // inflow, outflow
+  subType     String? // earned_income, passive_income, receivable_collection, other_inflow, fixed_expense, variable_expense, lending, debt_repayment, savings_investment
+  amount      Decimal   @db.Decimal(15, 2)
   description String?
   date        DateTime
-  source      String   @default("manual") // manual, csv_import
+  source      String    @default("manual") // manual, csv_import
   archivedAt  DateTime?
-  createdAt   DateTime @default(now())
+  createdAt   DateTime  @default(now())
 
   user     User      @relation(fields: [userId], references: [id], onDelete: Cascade)
   wallet   Wallet    @relation(fields: [walletId], references: [id], onDelete: Cascade)
@@ -134,7 +158,7 @@ model Category {
   name   String
   icon   String?
   color  String?
-  type   String  // income, expense
+  type   String // income, expense
 
   user         User          @relation(fields: [userId], references: [id], onDelete: Cascade)
   transactions Transaction[]
@@ -149,7 +173,7 @@ model Receivable {
   userId     String
   personName String
   amount     Decimal   @db.Decimal(15, 2)
-  amountPaid Decimal   @db.Decimal(15, 2) @default(0)
+  amountPaid Decimal   @default(0) @db.Decimal(15, 2)
   currency   String    @default("PKR")
   reason     String?
   status     String    @default("pending") // pending, partial, settled
@@ -180,7 +204,7 @@ model Liability {
   userId     String
   personName String
   amount     Decimal   @db.Decimal(15, 2)
-  amountPaid Decimal   @db.Decimal(15, 2) @default(0)
+  amountPaid Decimal   @default(0) @db.Decimal(15, 2)
   currency   String    @default("PKR")
   reason     String?
   status     String    @default("pending") // pending, partial, settled
@@ -212,13 +236,13 @@ model Property {
   name                 String
   location             String?
   totalPrice           Decimal   @db.Decimal(15, 2)
-  downPayment          Decimal   @db.Decimal(15, 2) @default(0)
+  downPayment          Decimal   @default(0) @db.Decimal(15, 2)
   monthlyInstallment   Decimal?  @db.Decimal(15, 2)
   balloonAmount        Decimal?  @db.Decimal(15, 2)
   balloonEveryNMonths  Int?
   installmentStartDate DateTime?
-  installmentDueDay    Int?      // 1-31, day of month
-  installmentMonths    Int?      // total tenure in months
+  installmentDueDay    Int? // 1-31, day of month
+  installmentMonths    Int? // total tenure in months
   currentValue         Decimal?  @db.Decimal(15, 2)
   status               String    @default("active") // active, sold, completed
   purchaseDate         DateTime
@@ -283,10 +307,10 @@ model StockHolding {
 model StockTrade {
   id        String   @id @default(cuid())
   holdingId String
-  type      String   // buy, sell
+  type      String // buy, sell
   quantity  Decimal  @db.Decimal(15, 4)
   price     Decimal  @db.Decimal(15, 4)
-  fee       Decimal  @db.Decimal(15, 2) @default(0)
+  fee       Decimal  @default(0) @db.Decimal(15, 2)
   date      DateTime
   notes     String?
 
@@ -296,57 +320,57 @@ model StockTrade {
 // ─── INVESTMENTS — COMMODITIES ───────────────────────────────────────────────
 
 model CommodityHolding {
-  id             String    @id @default(cuid())
-  userId         String
-  type           String    // gold, silver, oil, etc.
-  unit           String    // oz, gram, tola, barrel
-  quantity       Decimal   @db.Decimal(15, 4)
-  avgBuyPrice    Decimal   @db.Decimal(15, 4)  // derived: totalCostPaid / quantity
-  totalCostPaid  Decimal?  @db.Decimal(15, 2)  // actual amount paid incl. tax & charges
-  purchaseDate   DateTime  @default(now())
-  currentPrice   Decimal?  @db.Decimal(15, 4)
-  staticPriceId  String?
-  currency       String    @default("PKR")
-  archivedAt     DateTime?
-  createdAt      DateTime  @default(now())
-  updatedAt      DateTime  @updatedAt
+  id            String    @id @default(cuid())
+  userId        String
+  type          String // gold, silver, oil, etc.
+  unit          String // oz, gram, tola, barrel
+  quantity      Decimal   @db.Decimal(15, 4)
+  avgBuyPrice   Decimal   @db.Decimal(15, 4) // derived: totalCostPaid / quantity
+  totalCostPaid Decimal?  @db.Decimal(15, 2) // actual amount paid incl. tax & charges
+  purchaseDate  DateTime  @default(now())
+  currentPrice  Decimal?  @db.Decimal(15, 4)
+  staticPriceId String?
+  currency      String    @default("PKR")
+  archivedAt    DateTime?
+  createdAt     DateTime  @default(now())
+  updatedAt     DateTime  @updatedAt
 
-  user         User             @relation(fields: [userId], references: [id], onDelete: Cascade)
-  trades       CommodityTrade[]
-  staticPrice  StaticPrice?     @relation(fields: [staticPriceId], references: [id], onDelete: SetNull)
+  user        User             @relation(fields: [userId], references: [id], onDelete: Cascade)
+  trades      CommodityTrade[]
+  staticPrice StaticPrice?     @relation(fields: [staticPriceId], references: [id], onDelete: SetNull)
 }
 
 // ─── STATIC PRICES ───────────────────────────────────────────────────────────
 
 model StaticPrice {
-  id        String             @id @default(cuid())
+  id        String   @id @default(cuid())
   userId    String
-  name      String             // e.g. "Gold", "Silver"
-  createdAt DateTime           @default(now())
-  updatedAt DateTime           @updatedAt
+  name      String // e.g. "Gold", "Silver"
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
 
-  user      User               @relation(fields: [userId], references: [id], onDelete: Cascade)
-  entries   StaticPriceEntry[]
-  holdings  CommodityHolding[]
+  user     User               @relation(fields: [userId], references: [id], onDelete: Cascade)
+  entries  StaticPriceEntry[]
+  holdings CommodityHolding[]
 
   @@unique([userId, name])
 }
 
 model StaticPriceEntry {
-  id            String      @id @default(cuid())
+  id            String   @id @default(cuid())
   staticPriceId String
-  pricePerTola  Decimal     @db.Decimal(15, 4)
+  pricePerTola  Decimal  @db.Decimal(15, 4)
   date          DateTime
   note          String?
-  createdAt     DateTime    @default(now())
+  createdAt     DateTime @default(now())
 
-  staticPrice   StaticPrice @relation(fields: [staticPriceId], references: [id], onDelete: Cascade)
+  staticPrice StaticPrice @relation(fields: [staticPriceId], references: [id], onDelete: Cascade)
 }
 
 model CommodityTrade {
   id        String   @id @default(cuid())
   holdingId String
-  type      String   // buy, sell
+  type      String // buy, sell
   quantity  Decimal  @db.Decimal(15, 4)
   price     Decimal  @db.Decimal(15, 4)
   date      DateTime
@@ -361,7 +385,7 @@ model SideInvestment {
   id             String    @id @default(cuid())
   userId         String
   name           String
-  type           String    // crypto, lending, business, other
+  type           String // crypto, lending, business, other
   investedAmount Decimal   @db.Decimal(15, 2)
   currentValue   Decimal   @db.Decimal(15, 2)
   currency       String    @default("PKR")
@@ -432,20 +456,20 @@ model Business {
 }
 
 model LedgerEntry {
-  id                    String    @id @default(cuid())
+  id                    String   @id @default(cuid())
   businessId            String
-  type                  String    // income | expense
+  type                  String // income | expense
   category              String
   subcategory           String?
-  amount                Decimal   @db.Decimal(15, 2)
+  amount                Decimal  @db.Decimal(15, 2)
   date                  DateTime
   description           String?
   linkedInventoryId     String?
   linkedProductQuantity Int?
-  cogsAtTimeOfSale      Decimal?  @db.Decimal(15, 2)
+  cogsAtTimeOfSale      Decimal? @db.Decimal(15, 2)
   paymentMethod         String?
-  createdAt             DateTime  @default(now())
-  updatedAt             DateTime  @updatedAt
+  createdAt             DateTime @default(now())
+  updatedAt             DateTime @updatedAt
 
   business        Business       @relation(fields: [businessId], references: [id], onDelete: Cascade)
   linkedInventory InventoryItem? @relation(fields: [linkedInventoryId], references: [id], onDelete: SetNull)
@@ -455,24 +479,24 @@ model LedgerEntry {
 }
 
 model InventoryItem {
-  id                String    @id @default(cuid())
+  id                String   @id @default(cuid())
   businessId        String
   name              String
-  quantity          Int       @default(0)
-  purchasePrice     Decimal   @db.Decimal(15, 2)
-  sellingPrice      Decimal?  @db.Decimal(15, 2)
+  quantity          Int      @default(0)
+  purchasePrice     Decimal  @db.Decimal(15, 2)
+  sellingPrice      Decimal? @db.Decimal(15, 2)
   vendor            String?
   imageUrl          String?
   description       String?
   productCategory   String?
   productUrl        String?
   sku               String?
-  lowStockThreshold Int       @default(5)
-  isArchived        Boolean   @default(false)
-  createdAt         DateTime  @default(now())
-  updatedAt         DateTime  @updatedAt
+  lowStockThreshold Int      @default(5)
+  isArchived        Boolean  @default(false)
+  createdAt         DateTime @default(now())
+  updatedAt         DateTime @updatedAt
 
-  business      Business       @relation(fields: [businessId], references: [id], onDelete: Cascade)
+  business      Business      @relation(fields: [businessId], references: [id], onDelete: Cascade)
   ledgerEntries LedgerEntry[]
 
   @@index([businessId])

@@ -24,6 +24,8 @@ import {
   History,
   Settings,
   KeyRound,
+  UserCog,
+  CalendarCheck,
   BookOpen,
   Banknote,
   GitBranch,
@@ -82,6 +84,7 @@ const navItems: NavItem[] = [
     icon: Receipt,
     children: [
       { title: "Wallets", href: "/expenses/wallets", icon: Wallet },
+      { title: "Monthly Closing", href: "/expenses/monthly-closing", icon: CalendarCheck },
       { title: "Receivables", href: "/expenses/receivables", icon: Users },
       { title: "Liabilities", href: "/expenses/liabilities", icon: HandCoins },
       { title: "Categories", href: "/expenses/categories", icon: Tag },
@@ -124,6 +127,7 @@ const navItems: NavItem[] = [
     href: "/settings/configs",
     icon: Settings,
     children: [
+      { title: "Account", href: "/settings/account", icon: UserCog },
       { title: "Configs", href: "/settings/configs", icon: KeyRound },
       { title: "Static Prices", href: "/settings/static-prices", icon: Tag },
     ],

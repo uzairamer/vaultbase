@@ -58,6 +58,29 @@ export function useReconcileWallet() {
   })
 }
 
+export function useMonthlyClosings(params?: { year?: number; month?: number }) {
+  const query = params
+    ? "?" + new URLSearchParams(
+        Object.entries(params).reduce((acc, [k, v]) => (v !== undefined ? { ...acc, [k]: String(v) } : acc), {} as Record<string, string>)
+      ).toString()
+    : ""
+  return useQuery({ queryKey: ["monthly-closings", params], queryFn: () => fetcher(`/api/expenses/wallets/monthly-close${query}`) })
+}
+
+export function useCloseMonth() {
+  const qc = useQueryClient()
+  return useMutation({
+    mutationFn: (data: { walletId: string; year: number; month: number; closingBalance: number; note?: string }) =>
+      mutator("/api/expenses/wallets/monthly-close", { method: "POST", body: JSON.stringify(data) }),
+    onSuccess: () => {
+      qc.invalidateQueries({ queryKey: ["monthly-closings"] })
+      qc.invalidateQueries({ queryKey: ["wallets"] })
+      qc.invalidateQueries({ queryKey: ["transactions"] })
+      qc.invalidateQueries({ queryKey: ["insights"] })
+    },
+  })
+}
+
 export function useArchiveWallet() {
   const qc = useQueryClient()
   return useMutation({

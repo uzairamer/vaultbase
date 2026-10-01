@@ -4,6 +4,7 @@ services:
       target: dev
     environment:
       WATCHPACK_POLLING: "true"
+      NEXTAUTH_URL: http://localhost:7190
     volumes:
       - .:/app
       - /app/node_modules

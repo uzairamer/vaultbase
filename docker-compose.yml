@@ -24,7 +24,6 @@ services:
       - "7190:3000"
     environment:
       DATABASE_URL: postgresql://vaultbase:vaultbase_secret@db:5432/vaultbase
-      NEXTAUTH_URL: http://localhost:7190
       NEXTAUTH_SECRET: ${NEXTAUTH_SECRET}
     depends_on:
       db:

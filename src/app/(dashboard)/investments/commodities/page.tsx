@@ -1,6 +1,6 @@
 "use client"
 
-import { useState } from "react"
+import { useState, useMemo } from "react"
 import { useCommodities, useCreateCommodity, useDeleteCommodity, useStaticPrices } from "@/modules/investments/hooks"
 import { useWallets } from "@/modules/expenses/hooks"
 import { InvestmentArchiveDialog } from "@/modules/investments/components/archive-dialog"
@@ -11,28 +11,71 @@ import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogTrigger } from 
 import { Input } from "@/components/ui/input"
 import { Label } from "@/components/ui/label"
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select"
+import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuTrigger } from "@/components/ui/dropdown-menu"
 import { EmptyState } from "@/components/shared/empty-state"
-import { Plus, Gem, Trash2, Archive, TrendingDown, TrendingUp, CheckCircle2 } from "lucide-react"
-import { Badge } from "@/components/ui/badge"
+import {
+  Plus, Gem, Trash2, Archive, TrendingDown, TrendingUp, CheckCircle2,
+  Coins, Droplet, ChevronDown, ChevronUp, MoreVertical, Wallet as WalletIcon, Activity,
+} from "lucide-react"
 import { cn, formatCurrency, formatCompact, formatPercent } from "@/lib/utils"
 import { COMMODITY_UNITS } from "@/lib/constants"
 import { toast } from "sonner"
-import { format } from "date-fns"
 
-// Per-type accent colors — distinct for each commodity class
-const TYPE_ACCENTS: Record<string, {
-  from: string; to: string; ring: string; ringHover: string
-  badge: string; soldBg: string
-}> = {
-  gold:     { from: "from-yellow-500/25",  to: "to-amber-500/5",   ring: "ring-yellow-500/40",  ringHover: "hover:ring-yellow-400/70",  badge: "bg-yellow-500/10 border-yellow-500/40 text-yellow-300",  soldBg: "from-yellow-500/8 to-amber-500/3" },
-  silver:   { from: "from-slate-400/25",   to: "to-zinc-500/5",    ring: "ring-slate-400/40",   ringHover: "hover:ring-slate-300/70",   badge: "bg-slate-400/10 border-slate-400/40 text-slate-300",     soldBg: "from-slate-500/8 to-zinc-500/3" },
-  platinum: { from: "from-purple-500/25",  to: "to-violet-500/5",  ring: "ring-purple-500/40",  ringHover: "hover:ring-purple-400/70",  badge: "bg-purple-500/10 border-purple-500/40 text-purple-300",  soldBg: "from-purple-500/8 to-violet-500/3" },
-  oil:      { from: "from-orange-600/25",  to: "to-red-600/5",     ring: "ring-orange-600/40",  ringHover: "hover:ring-orange-500/70",  badge: "bg-orange-500/10 border-orange-600/40 text-orange-300",  soldBg: "from-orange-600/8 to-red-600/3" },
-  other:    { from: "from-teal-500/25",    to: "to-cyan-500/5",    ring: "ring-teal-500/40",    ringHover: "hover:ring-teal-400/70",    badge: "bg-teal-500/10 border-teal-500/40 text-teal-300",        soldBg: "from-teal-500/8 to-cyan-500/3" },
+const TYPE_ICONS: Record<string, typeof Coins> = {
+  gold: Coins,
+  silver: Coins,
+  platinum: Coins,
+  oil: Droplet,
 }
 
-function typeAccent(type: string) {
-  return TYPE_ACCENTS[type.toLowerCase()] ?? TYPE_ACCENTS.other
+const TYPE_ICON_COLORS: Record<string, string> = {
+  gold: "bg-amber-500/15 text-amber-400",
+  silver: "bg-slate-400/15 text-slate-300",
+  platinum: "bg-purple-500/15 text-purple-300",
+  oil: "bg-orange-500/15 text-orange-300",
+  other: "bg-teal-500/15 text-teal-300",
+}
+
+function typeIcon(type: string) {
+  return TYPE_ICONS[type.toLowerCase()] ?? Gem
+}
+function typeIconColor(type: string) {
+  return TYPE_ICON_COLORS[type.toLowerCase()] ?? TYPE_ICON_COLORS.other
+}
+
+// Full amount with the compact form in brackets, e.g. "Rs 900,000 (9L)"
+function withCompact(amount: number) {
+  const compact = formatCompact(amount).replace("Rs ", "")
+  return `${formatCurrency(amount)} (${compact})`
+}
+
+interface EnrichedLot {
+  id: string
+  type: string
+  unit: string
+  purchaseDate: string
+  buyQty: number
+  qty: number
+  isSold: boolean
+  totalCostPaid: number
+  currentPrice: number
+  currentValue: number
+  totalReceived: number | null
+  pnl: number
+  returnPct: number
+}
+
+interface TypeGroup {
+  type: string
+  unit: string
+  lots: EnrichedLot[]
+  totalQty: number
+  totalCostPaid: number
+  investedAmount: number
+  totalCurrentValue: number
+  totalPnl: number
+  returnPct: number
+  lastBought: Date
 }
 
 export default function CommoditiesPage() {
@@ -60,20 +103,98 @@ export default function CommoditiesPage() {
   const [deleteId, setDeleteId] = useState<string | null>(null)
   const [deleteName, setDeleteName] = useState("")
 
-  const walletList = wallets as Record<string, unknown>[]
+  const [expanded, setExpanded] = useState<Set<string>>(new Set())
 
+  const walletList = wallets as Record<string, unknown>[]
   const staticPriceList = staticPrices as Record<string, unknown>[]
   const commodityList = commodities as Record<string, unknown>[]
 
-  const totalValue = commodityList.reduce((sum, c) => {
-    const buyQty = Number(c.quantity)
-    const soldQty = ((c.trades as Record<string, unknown>[] | undefined) ?? [])
-      .filter((t) => t.type === "sell")
-      .reduce((a: number, t) => a + Number(t.quantity), 0)
-    const qty = Math.max(0, buyQty - soldQty)
-    const cur = c.resolvedPrice != null ? Number(c.resolvedPrice) : Number(c.currentPrice ?? c.avgBuyPrice)
-    return sum + qty * cur
-  }, 0)
+  const groups = useMemo((): TypeGroup[] => {
+    const byType = new Map<string, Record<string, unknown>[]>()
+    for (const c of commodityList) {
+      const type = (c.type as string).toLowerCase()
+      if (!byType.has(type)) byType.set(type, [])
+      byType.get(type)!.push(c)
+    }
+
+    return Array.from(byType.entries())
+      .map(([type, rows]) => {
+        const lots: EnrichedLot[] = rows.map((c) => {
+          const buyQty = Number(c.quantity)
+          const trades = (c.trades as Record<string, unknown>[]) ?? []
+          const soldQty = trades.filter((t) => t.type === "sell").reduce((a: number, t) => a + Number(t.quantity), 0)
+          const qty = Math.max(0, buyQty - soldQty)
+          const isSold = qty <= 0
+          const totalCostPaid = c.totalCostPaid != null ? Number(c.totalCostPaid) : buyQty * Number(c.avgBuyPrice)
+          const currentPrice = c.resolvedPrice != null ? Number(c.resolvedPrice) : Number(c.currentPrice ?? c.avgBuyPrice)
+          const currentValue = qty * currentPrice
+          const totalReceived = isSold
+            ? trades.filter((t) => t.type === "sell").reduce((a: number, t) => a + Number(t.quantity) * Number(t.price), 0)
+            : null
+          const pnl = totalReceived != null ? totalReceived - totalCostPaid : currentValue - totalCostPaid
+          return {
+            id: c.id as string,
+            type,
+            unit: c.unit as string,
+            purchaseDate: c.purchaseDate as string,
+            buyQty,
+            qty,
+            isSold,
+            totalCostPaid,
+            currentPrice,
+            currentValue,
+            totalReceived,
+            pnl,
+            returnPct: totalCostPaid > 0 ? (pnl / totalCostPaid) * 100 : 0,
+          }
+        })
+
+        const openLots = lots.filter((l) => !l.isSold)
+        const totalQty = openLots.reduce((s, l) => s + l.qty, 0)
+        const totalCostPaid = lots.reduce((s, l) => s + l.totalCostPaid, 0)
+        const openCostPaid = openLots.reduce((s, l) => s + l.totalCostPaid, 0)
+        const totalCurrentValue = openLots.reduce((s, l) => s + l.currentValue, 0)
+        const totalPnl = lots.reduce((s, l) => s + l.pnl, 0)
+        const lastBought = lots.reduce((max, l) => {
+          const d = new Date(l.purchaseDate)
+          return d > max ? d : max
+        }, new Date(0))
+
+        return {
+          type,
+          unit: rows[0].unit as string,
+          lots: lots.sort((a, b) => new Date(b.purchaseDate).getTime() - new Date(a.purchaseDate).getTime()),
+          totalQty,
+          totalCostPaid,
+          investedAmount: openCostPaid,
+          totalCurrentValue,
+          totalPnl,
+          returnPct: openCostPaid > 0 ? (totalPnl / openCostPaid) * 100 : 0,
+          lastBought,
+        }
+      })
+      .sort((a, b) => b.totalCurrentValue - a.totalCurrentValue)
+  }, [commodityList])
+
+  const { totalValue, totalInvested, totalPnl, totalReturnPct } = useMemo(() => {
+    let invested = 0
+    let value = 0
+    for (const g of groups) {
+      invested += g.lots.filter((l) => !l.isSold).reduce((s, l) => s + l.totalCostPaid, 0)
+      value += g.totalCurrentValue
+    }
+    const pnl = value - invested
+    return { totalValue: value, totalInvested: invested, totalPnl: pnl, totalReturnPct: invested > 0 ? (pnl / invested) * 100 : 0 }
+  }, [groups])
+
+  function toggleExpanded(type: string) {
+    setExpanded((prev) => {
+      const next = new Set(prev)
+      if (next.has(type)) next.delete(type)
+      else next.add(type)
+      return next
+    })
+  }
 
   function resetAddForm() {
     setSelectedStaticPrice("none")
@@ -158,7 +279,7 @@ export default function CommoditiesPage() {
 
   return (
     <div>
-      <PageHeader title="Commodities" description={`Active value: ${formatCompact(totalValue)}`}>
+      <PageHeader title="Commodities" description="Track your investments in precious metals">
         <div className="flex flex-wrap gap-2">
           {commodityList.length > 0 && (
             <Button variant="outline" className="text-orange-600 border-orange-200 hover:bg-orange-50 dark:border-orange-900 dark:hover:bg-orange-950" onClick={() => setArchiveOpen(true)}>
@@ -169,12 +290,16 @@ export default function CommoditiesPage() {
           )}
           <Dialog open={open} onOpenChange={(v) => { setOpen(v); if (!v) resetAddForm() }}>
             <DialogTrigger asChild>
-              <Button><Plus className="mr-2 h-4 w-4" /> Add Commodity</Button>
+              <Button
+                variant="outline"
+                className="border-amber-500/50 text-amber-400 hover:bg-amber-500/10 hover:text-amber-300 dark:border-amber-500/50 dark:hover:bg-amber-500/10"
+              >
+                <Plus className="mr-2 h-4 w-4" /> Add Commodity
+              </Button>
             </DialogTrigger>
             <DialogContent>
               <DialogHeader><DialogTitle>Add Commodity Holding</DialogTitle></DialogHeader>
               <form onSubmit={handleAdd} className="space-y-4">
-                {/* Commodity type = static price selection */}
                 <div className="space-y-2">
                   <Label>Commodity</Label>
                   {staticPriceList.length === 0 ? (
@@ -247,7 +372,6 @@ export default function CommoditiesPage() {
                   </div>
                 )}
 
-                {/* Optional wallet deduction */}
                 <div className="space-y-2">
                   <Label>Deduct from wallet <span className="text-muted-foreground font-normal text-xs">(optional)</span></Label>
                   <Select value={buyWalletId} onValueChange={setBuyWalletId}>
@@ -275,112 +399,323 @@ export default function CommoditiesPage() {
       {commodityList.length === 0 ? (
         <EmptyState icon={Gem} title="No commodities" description="Track gold, silver, and other commodity holdings." />
       ) : (
-        <div className="grid gap-2 sm:gap-3 grid-cols-1 sm:grid-cols-2 lg:grid-cols-3">
-          {commodityList.map((c) => {
-            const type = (c.type as string).toLowerCase()
-            const accent = typeAccent(type)
-            const buyQty = Number(c.quantity)
-            const trades = (c.trades as Record<string, unknown>[]) ?? []
-            const soldQty = trades.filter((t) => t.type === "sell").reduce((a: number, t) => a + Number(t.quantity), 0)
-            const qty = Math.max(0, buyQty - soldQty)
-            const isSold = qty <= 0
-            const totalCostPaid = c.totalCostPaid != null ? Number(c.totalCostPaid) : buyQty * Number(c.avgBuyPrice)
-            const cur = c.resolvedPrice != null ? Number(c.resolvedPrice) : Number(c.currentPrice ?? c.avgBuyPrice)
-            const currentValue = qty * cur
-
-            // For sold items: total received from sell trades
-            const totalReceived = isSold
-              ? trades.filter((t) => t.type === "sell").reduce((a: number, t) => a + Number(t.quantity) * Number(t.price), 0)
-              : null
-            const displayPnl = totalReceived != null ? totalReceived - totalCostPaid : currentValue - totalCostPaid
-            const pnlPositive = displayPnl >= 0
-
-            return (
-              <div
-                key={c.id as string}
-                className={cn(
-                  "relative overflow-hidden rounded-xl border bg-gradient-to-br p-3 sm:p-4 ring-1 transition-all h-full flex flex-col",
-                  isSold
-                    ? cn("opacity-60 bg-muted/30 border-muted ring-muted/30", accent.soldBg)
-                    : cn(accent.from, accent.to, accent.ring)
-                )}
-              >
-                {/* Header */}
-                <div className="flex items-start justify-between gap-2 mb-2">
-                  <div className="min-w-0 flex-1">
-                    <div className="flex items-center gap-1.5 flex-wrap">
-                      <p className="text-base font-semibold capitalize">{c.type as string}</p>
-                      {isSold && <Badge className="bg-muted text-muted-foreground border-0 text-[10px] h-4 px-1.5">Sold</Badge>}
-                    </div>
-                    <p className="text-[11px] text-muted-foreground mt-0.5 tabular-nums">
-                      {isSold ? `${buyQty} ${c.unit as string} sold` : `${qty} ${c.unit as string} held`}
-                      {c.purchaseDate ? ` · ${new Date(c.purchaseDate as string).toLocaleDateString("en-PK", { day: "numeric", month: "short", year: "numeric" })}` : ""}
-                      {c.unit as string === "gram" || c.unit as string === "tola" || c.unit as string === "oz" ? "" : ""}
-                    </p>
-                  </div>
-                  <div className="flex items-center gap-1 shrink-0" onClick={(e) => e.stopPropagation()}>
-                    {!isSold && (
-                      <Button
-                        variant="ghost"
-                        size="sm"
-                        className="h-7 text-[11px] px-2 text-red-400 hover:bg-red-500/10"
-                        onClick={() => { setSellId(c.id as string); setSellAmount("") }}
-                      >
-                        <TrendingDown className="h-3 w-3 mr-1" />
-                        Sell
-                      </Button>
-                    )}
-                    <Button variant="ghost" size="icon" className="h-7 w-7 shrink-0" onClick={() => { setDeleteId(c.id as string); setDeleteName(c.type as string) }}>
-                      <Trash2 className="h-3.5 w-3.5" />
-                    </Button>
-                  </div>
+        <div className="space-y-6">
+          {/* ── Stats bar ───────────────────────────────────────────── */}
+          <div className="flex flex-col gap-4 rounded-xl border bg-card p-4 sm:flex-row sm:items-center sm:gap-0 sm:divide-x sm:p-5">
+            <div className="flex items-center gap-3 sm:flex-1 sm:pr-6">
+              <div className="flex h-10 w-10 shrink-0 items-center justify-center rounded-full bg-amber-500/15 text-amber-400">
+                <WalletIcon className="h-4 w-4" />
+              </div>
+              <div>
+                <p className="text-xs text-muted-foreground">Total Value</p>
+                <div className="flex items-baseline gap-2">
+                  <p className="text-xl font-bold tabular-nums">{formatCompact(totalValue)}</p>
+                  <span className={cn("flex items-center gap-0.5 text-xs font-medium tabular-nums", totalReturnPct >= 0 ? "text-emerald-400" : "text-red-400")}>
+                    {totalReturnPct >= 0 ? <TrendingUp className="h-3 w-3" /> : <TrendingDown className="h-3 w-3" />}
+                    {formatPercent(Math.abs(totalReturnPct))}
+                  </span>
                 </div>
+              </div>
+            </div>
+            <div className="flex items-center gap-3 sm:flex-1 sm:px-6">
+              <div className="flex h-10 w-10 shrink-0 items-center justify-center rounded-full bg-muted text-muted-foreground">
+                <Activity className="h-4 w-4" />
+              </div>
+              <div>
+                <p className="text-xs text-muted-foreground">Invested</p>
+                <p className="text-xl font-bold tabular-nums">{formatCompact(totalInvested)}</p>
+              </div>
+            </div>
+            <div className="flex items-center gap-3 sm:flex-1 sm:pl-6">
+              <div className={cn("flex h-10 w-10 shrink-0 items-center justify-center rounded-full", totalPnl >= 0 ? "bg-emerald-500/15 text-emerald-400" : "bg-red-500/15 text-red-400")}>
+                {totalPnl >= 0 ? <TrendingUp className="h-4 w-4" /> : <TrendingDown className="h-4 w-4" />}
+              </div>
+              <div>
+                <p className="text-xs text-muted-foreground">Total P/L</p>
+                <div className="flex items-baseline gap-2">
+                  <p className={cn("text-xl font-bold tabular-nums", totalPnl >= 0 ? "text-emerald-400" : "text-red-400")}>
+                    {totalPnl >= 0 ? "+" : ""}{formatCompact(totalPnl)}
+                  </p>
+                  <span className={cn("flex items-center gap-0.5 text-xs font-medium tabular-nums", totalReturnPct >= 0 ? "text-emerald-400" : "text-red-400")}>
+                    {totalReturnPct >= 0 ? <TrendingUp className="h-3 w-3" /> : <TrendingDown className="h-3 w-3" />}
+                    {formatPercent(Math.abs(totalReturnPct))}
+                  </span>
+                </div>
+              </div>
+            </div>
+          </div>
 
-                {/* Values */}
-                {isSold ? (
-                  <div className="space-y-1 mt-auto">
-                    <div className="flex items-center justify-between text-xs text-muted-foreground tabular-nums">
-                      <span>Received</span>
+          {/* ── Holdings ────────────────────────────────────────────── */}
+          <div>
+            <h2 className="mb-3 text-lg font-semibold">Holdings</h2>
+
+            {/* Desktop table */}
+            <div className="hidden overflow-hidden rounded-xl border sm:block">
+              <div className="grid grid-cols-[1.7fr_0.8fr_1.7fr_1.7fr_1.3fr_0.9fr_0.9fr_40px] gap-3 border-b bg-muted/30 px-4 py-2.5 text-xs font-medium text-muted-foreground">
+                <span>Commodity</span>
+                <span>Quantity</span>
+                <span>Purchase Price</span>
+                <span>Current Value</span>
+                <span>P/L</span>
+                <span>Return</span>
+                <span>Last Bought</span>
+                <span />
+              </div>
+              <div className="divide-y">
+                {groups.map((g) => {
+                  const Icon = typeIcon(g.type)
+                  const isExpanded = expanded.has(g.type)
+                  const multiLot = g.lots.length > 1
+                  const singleLot = g.lots[0]
+                  return (
+                    <div key={g.type}>
+                      <div
+                        className={cn("grid grid-cols-[1.7fr_0.8fr_1.7fr_1.7fr_1.3fr_0.9fr_0.9fr_40px] items-center gap-3 px-4 py-3.5", multiLot && "cursor-pointer hover:bg-muted/20")}
+                        onClick={multiLot ? () => toggleExpanded(g.type) : undefined}
+                      >
+                        <div className="flex items-center gap-3 min-w-0">
+                          <div className={cn("flex h-9 w-9 shrink-0 items-center justify-center rounded-full", typeIconColor(g.type))}>
+                            <Icon className="h-4 w-4" />
+                          </div>
+                          <div className="min-w-0">
+                            <p className="truncate font-semibold capitalize">{g.type}</p>
+                            <p className="truncate text-xs text-muted-foreground tabular-nums">
+                              {g.totalQty} {g.unit} held{multiLot ? ` · ${g.lots.length} lots` : ""}
+                            </p>
+                          </div>
+                        </div>
+                        <span className="font-medium tabular-nums">{g.totalQty} {g.unit}</span>
+                        <span className="tabular-nums">{withCompact(g.investedAmount)}</span>
+                        <span className="font-medium tabular-nums">{withCompact(g.totalCurrentValue)}</span>
+                        <span className={cn("font-medium tabular-nums", g.totalPnl >= 0 ? "text-emerald-400" : "text-red-400")}>
+                          {g.totalPnl >= 0 ? "+" : ""}{withCompact(g.totalPnl)}
+                        </span>
+                        <span className={cn("font-medium tabular-nums", g.returnPct >= 0 ? "text-emerald-400" : "text-red-400")}>
+                          {g.returnPct >= 0 ? "+" : ""}{formatPercent(g.returnPct)}
+                        </span>
+                        <span className="text-xs text-muted-foreground">
+                          {g.lastBought.toLocaleDateString("en-GB", { day: "numeric", month: "short", year: "numeric" })}
+                        </span>
+                        <div onClick={(e) => e.stopPropagation()}>
+                          {multiLot ? (
+                            <button
+                              onClick={() => toggleExpanded(g.type)}
+                              className="flex h-7 w-7 items-center justify-center rounded-md text-muted-foreground hover:bg-muted"
+                            >
+                              {isExpanded ? <ChevronUp className="h-4 w-4" /> : <ChevronDown className="h-4 w-4" />}
+                            </button>
+                          ) : (
+                            <DropdownMenu>
+                              <DropdownMenuTrigger asChild>
+                                <button className="flex h-7 w-7 items-center justify-center rounded-md text-muted-foreground hover:bg-muted">
+                                  <MoreVertical className="h-4 w-4" />
+                                </button>
+                              </DropdownMenuTrigger>
+                              <DropdownMenuContent align="end">
+                                {!singleLot.isSold && (
+                                  <DropdownMenuItem onClick={() => { setSellId(singleLot.id); setSellAmount("") }}>
+                                    <TrendingDown className="mr-2 h-3.5 w-3.5" /> Sell
+                                  </DropdownMenuItem>
+                                )}
+                                <DropdownMenuItem
+                                  className="text-destructive focus:text-destructive"
+                                  onClick={() => { setDeleteId(singleLot.id); setDeleteName(g.type) }}
+                                >
+                                  <Trash2 className="mr-2 h-3.5 w-3.5" /> Delete
+                                </DropdownMenuItem>
+                              </DropdownMenuContent>
+                            </DropdownMenu>
+                          )}
+                        </div>
+                      </div>
+
+                      {multiLot && isExpanded && (
+                        <div className="bg-muted/10 px-4 pb-4">
+                          <p className="pb-2 pt-1 text-sm font-semibold">Purchase Lots</p>
+                          <div className="overflow-hidden rounded-lg border">
+                            <div className="grid grid-cols-[1.4fr_0.8fr_1.1fr_1.7fr_1.7fr_1.2fr_0.9fr_40px] gap-3 border-b bg-background px-3 py-2 text-[11px] font-medium text-muted-foreground">
+                              <span>Lot</span>
+                              <span>Quantity</span>
+                              <span>Purchase Date</span>
+                              <span>Paid Amount</span>
+                              <span>Current Value</span>
+                              <span>P/L</span>
+                              <span>Return</span>
+                              <span />
+                            </div>
+                            <div className="divide-y">
+                              {g.lots.map((lot, i) => (
+                                <div key={lot.id} className={cn("grid grid-cols-[1.4fr_0.8fr_1.1fr_1.7fr_1.7fr_1.2fr_0.9fr_40px] items-center gap-3 px-3 py-3 text-sm", lot.isSold && "opacity-60")}>
+                                  <div className="flex items-center gap-2.5 min-w-0">
+                                    <div className="flex h-7 w-7 shrink-0 items-center justify-center rounded-full bg-muted text-muted-foreground">
+                                      <Icon className="h-3.5 w-3.5" />
+                                    </div>
+                                    <div className="min-w-0">
+                                      <p className="truncate font-medium">Lot {g.lots.length - i}{lot.isSold ? " (sold)" : ""}</p>
+                                      <p className="text-xs text-muted-foreground tabular-nums">{lot.buyQty} {lot.unit}</p>
+                                    </div>
+                                  </div>
+                                  <span className="tabular-nums">{lot.isSold ? lot.buyQty : lot.qty} {lot.unit}</span>
+                                  <span className="text-xs text-muted-foreground">
+                                    {new Date(lot.purchaseDate).toLocaleDateString("en-GB", { day: "numeric", month: "short", year: "numeric" })}
+                                  </span>
+                                  <span className="tabular-nums">{withCompact(lot.totalCostPaid)}</span>
+                                  <span className="tabular-nums">{withCompact(lot.isSold ? (lot.totalReceived ?? 0) : lot.currentValue)}</span>
+                                  <span className={cn("font-medium tabular-nums", lot.pnl >= 0 ? "text-emerald-400" : "text-red-400")}>
+                                    {lot.pnl >= 0 ? "+" : ""}{withCompact(lot.pnl)}
+                                  </span>
+                                  <span className={cn("font-medium tabular-nums", lot.returnPct >= 0 ? "text-emerald-400" : "text-red-400")}>
+                                    {lot.returnPct >= 0 ? "+" : ""}{formatPercent(lot.returnPct)}
+                                  </span>
+                                  <DropdownMenu>
+                                    <DropdownMenuTrigger asChild>
+                                      <button className="flex h-7 w-7 items-center justify-center rounded-md text-muted-foreground hover:bg-muted">
+                                        <MoreVertical className="h-4 w-4" />
+                                      </button>
+                                    </DropdownMenuTrigger>
+                                    <DropdownMenuContent align="end">
+                                      {!lot.isSold && (
+                                        <DropdownMenuItem onClick={() => { setSellId(lot.id); setSellAmount("") }}>
+                                          <TrendingDown className="mr-2 h-3.5 w-3.5" /> Sell
+                                        </DropdownMenuItem>
+                                      )}
+                                      <DropdownMenuItem
+                                        className="text-destructive focus:text-destructive"
+                                        onClick={() => { setDeleteId(lot.id); setDeleteName(g.type) }}
+                                      >
+                                        <Trash2 className="mr-2 h-3.5 w-3.5" /> Delete
+                                      </DropdownMenuItem>
+                                    </DropdownMenuContent>
+                                  </DropdownMenu>
+                                </div>
+                              ))}
+                              <div className="grid grid-cols-[1.4fr_0.8fr_1.1fr_1.7fr_1.7fr_1.2fr_0.9fr_40px] items-center gap-3 bg-background px-3 py-3 text-sm font-semibold">
+                                <span className="flex items-center gap-2.5">
+                                  <Icon className="h-3.5 w-3.5 text-muted-foreground" />
+                                  Total ({g.type})
+                                </span>
+                                <span />
+                                <span />
+                                <span className="tabular-nums">{withCompact(g.investedAmount)}</span>
+                                <span className="tabular-nums">{withCompact(g.totalCurrentValue)}</span>
+                                <span className={cn("tabular-nums", g.totalPnl >= 0 ? "text-emerald-400" : "text-red-400")}>
+                                  {g.totalPnl >= 0 ? "+" : ""}{withCompact(g.totalPnl)}
+                                </span>
+                                <span className={cn("tabular-nums", g.returnPct >= 0 ? "text-emerald-400" : "text-red-400")}>
+                                  {g.returnPct >= 0 ? "+" : ""}{formatPercent(g.returnPct)}
+                                </span>
+                                <span />
+                              </div>
+                            </div>
+                          </div>
+                        </div>
+                      )}
+                    </div>
+                  )
+                })}
+              </div>
+            </div>
+
+            {/* Mobile cards */}
+            <div className="space-y-2 sm:hidden">
+              {groups.map((g) => {
+                const Icon = typeIcon(g.type)
+                const isExpanded = expanded.has(g.type)
+                const multiLot = g.lots.length > 1
+                const singleLot = g.lots[0]
+                return (
+                  <div key={g.type} className="overflow-hidden rounded-xl border">
+                    <div
+                      className="flex items-center gap-3 p-3"
+                      onClick={multiLot ? () => toggleExpanded(g.type) : undefined}
+                    >
+                      <div className={cn("flex h-9 w-9 shrink-0 items-center justify-center rounded-full", typeIconColor(g.type))}>
+                        <Icon className="h-4 w-4" />
+                      </div>
+                      <div className="min-w-0 flex-1">
+                        <p className="truncate font-semibold capitalize">{g.type}</p>
+                        <p className="truncate text-xs text-muted-foreground tabular-nums">
+                          {g.totalQty} {g.unit} held{multiLot ? ` · ${g.lots.length} lots` : ""}
+                        </p>
+                      </div>
                       <div className="text-right">
-                        <span className="font-medium text-foreground block">{formatCompact(totalReceived ?? 0)}</span>
-                        <span className="text-[10px] text-muted-foreground/70 tabular-nums">{formatCurrency(totalReceived ?? 0)}</span>
+                        <p className="font-semibold tabular-nums">{formatCompact(g.totalCurrentValue)}</p>
+                        <p className={cn("text-xs font-medium tabular-nums", g.totalPnl >= 0 ? "text-emerald-400" : "text-red-400")}>
+                          {g.totalPnl >= 0 ? "+" : ""}{formatCompact(g.totalPnl)} ({g.returnPct >= 0 ? "+" : ""}{formatPercent(g.returnPct)})
+                        </p>
+                      </div>
+                      <div onClick={(e) => e.stopPropagation()}>
+                        {multiLot ? (
+                          <button onClick={() => toggleExpanded(g.type)} className="flex h-7 w-7 items-center justify-center text-muted-foreground">
+                            {isExpanded ? <ChevronUp className="h-4 w-4" /> : <ChevronDown className="h-4 w-4" />}
+                          </button>
+                        ) : (
+                          <DropdownMenu>
+                            <DropdownMenuTrigger asChild>
+                              <button className="flex h-7 w-7 items-center justify-center text-muted-foreground">
+                                <MoreVertical className="h-4 w-4" />
+                              </button>
+                            </DropdownMenuTrigger>
+                            <DropdownMenuContent align="end">
+                              {!singleLot.isSold && (
+                                <DropdownMenuItem onClick={() => { setSellId(singleLot.id); setSellAmount("") }}>
+                                  <TrendingDown className="mr-2 h-3.5 w-3.5" /> Sell
+                                </DropdownMenuItem>
+                              )}
+                              <DropdownMenuItem
+                                className="text-destructive focus:text-destructive"
+                                onClick={() => { setDeleteId(singleLot.id); setDeleteName(g.type) }}
+                              >
+                                <Trash2 className="mr-2 h-3.5 w-3.5" /> Delete
+                              </DropdownMenuItem>
+                            </DropdownMenuContent>
+                          </DropdownMenu>
+                        )}
                       </div>
                     </div>
-                    <div className="flex items-center justify-between text-xs text-muted-foreground tabular-nums">
-                      <span>Paid</span>
-                      <span>{formatCompact(totalCostPaid)}</span>
-                    </div>
-                    <div className={cn("flex items-center justify-between text-sm font-semibold tabular-nums pt-1 border-t border-border/30", pnlPositive ? "text-emerald-400" : "text-red-400")}>
-                      <span className="flex items-center gap-1">
-                        {pnlPositive ? <TrendingUp className="h-3.5 w-3.5" /> : <TrendingDown className="h-3.5 w-3.5" />}
-                        {pnlPositive ? "Gain" : "Loss"}
-                      </span>
-                      <span>{pnlPositive ? "+" : ""}{formatCompact(displayPnl)}</span>
-                    </div>
+
+                    {multiLot && isExpanded && (
+                      <div className="divide-y border-t bg-muted/10">
+                        {g.lots.map((lot, i) => (
+                          <div key={lot.id} className={cn("flex items-center gap-2.5 p-3", lot.isSold && "opacity-60")}>
+                            <div className="min-w-0 flex-1">
+                              <p className="text-sm font-medium">Lot {g.lots.length - i}{lot.isSold ? " (sold)" : ""} — {lot.isSold ? lot.buyQty : lot.qty} {lot.unit}</p>
+                              <p className="text-xs text-muted-foreground">
+                                {new Date(lot.purchaseDate).toLocaleDateString("en-GB", { day: "numeric", month: "short", year: "numeric" })} · Paid {formatCompact(lot.totalCostPaid)}
+                              </p>
+                            </div>
+                            <p className={cn("shrink-0 text-xs font-semibold tabular-nums", lot.pnl >= 0 ? "text-emerald-400" : "text-red-400")}>
+                              {lot.pnl >= 0 ? "+" : ""}{formatCompact(lot.pnl)}
+                            </p>
+                            <DropdownMenu>
+                              <DropdownMenuTrigger asChild>
+                                <button className="flex h-7 w-7 shrink-0 items-center justify-center text-muted-foreground">
+                                  <MoreVertical className="h-4 w-4" />
+                                </button>
+                              </DropdownMenuTrigger>
+                              <DropdownMenuContent align="end">
+                                {!lot.isSold && (
+                                  <DropdownMenuItem onClick={() => { setSellId(lot.id); setSellAmount("") }}>
+                                    <TrendingDown className="mr-2 h-3.5 w-3.5" /> Sell
+                                  </DropdownMenuItem>
+                                )}
+                                <DropdownMenuItem
+                                  className="text-destructive focus:text-destructive"
+                                  onClick={() => { setDeleteId(lot.id); setDeleteName(g.type) }}
+                                >
+                                  <Trash2 className="mr-2 h-3.5 w-3.5" /> Delete
+                                </DropdownMenuItem>
+                              </DropdownMenuContent>
+                            </DropdownMenu>
+                          </div>
+                        ))}
+                      </div>
+                    )}
                   </div>
-                ) : (
-                  <div className="space-y-1 mt-auto">
-                    <div className="flex items-baseline justify-between gap-2">
-                      <span className="text-[11px] text-muted-foreground">Market value</span>
-                      <p className="text-xl font-bold tabular-nums">{formatCompact(currentValue)}</p>
-                    </div>
-                    <p className="text-[10px] text-muted-foreground/70 tabular-nums text-right">{formatCurrency(currentValue)}</p>
-                    <div className="flex items-center justify-between text-xs text-muted-foreground tabular-nums">
-                      <span>Paid</span>
-                      <span className="text-foreground/70">{formatCompact(totalCostPaid)}</span>
-                    </div>
-                    <div className={cn(
-                      "flex items-center justify-between text-sm font-semibold tabular-nums pt-1 border-t border-white/5",
-                      pnlPositive ? "text-emerald-400" : "text-red-400"
-                    )}>
-                      <span>{pnlPositive ? "+" : ""}{formatCompact(displayPnl)}</span>
-                      <span className="text-xs font-normal opacity-75">{formatPercent(totalCostPaid > 0 ? (displayPnl / totalCostPaid) * 100 : 0)}</span>
-                    </div>
-                  </div>
-                )}
-              </div>
-            )
-          })}
+                )
+              })}
+            </div>
+          </div>
         </div>
       )}
 

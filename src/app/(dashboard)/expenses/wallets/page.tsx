@@ -27,6 +27,13 @@ const walletIcons: Record<string, React.ElementType> = {
   other: Wallet,
 }
 
+const CURRENCIES = [
+  { value: "PKR", label: "PKR — Pakistani Rupee" },
+  { value: "USD", label: "USD — US Dollar" },
+  { value: "EUR", label: "EUR — Euro" },
+  { value: "GBP", label: "GBP — British Pound" },
+]
+
 // Deterministic accent colour based on wallet name
 const CARD_ACCENTS = [
   { from: "#4f46e5", to: "#7c3aed" }, // indigo → violet
@@ -173,6 +180,7 @@ export default function WalletsPage() {
         type: fd.get("type") as string,
         bankName: (fd.get("bankName") as string) || undefined,
         balance: Number(fd.get("balance")),
+        currency: (fd.get("currency") as string) || "PKR",
       },
       {
         onSuccess: () => {
@@ -231,9 +239,22 @@ export default function WalletsPage() {
                 <Label>Bank Name (optional)</Label>
                 <Input name="bankName" placeholder="e.g. HBL, Meezan" />
               </div>
-              <div className="space-y-2">
-                <Label>Initial Balance</Label>
-                <Input name="balance" type="number" step="0.01" defaultValue="0" required />
+              <div className="grid grid-cols-2 gap-4">
+                <div className="space-y-2">
+                  <Label>Initial Balance</Label>
+                  <Input name="balance" type="number" step="0.01" placeholder="0.00" required />
+                </div>
+                <div className="space-y-2">
+                  <Label>Currency</Label>
+                  <Select name="currency" defaultValue="PKR">
+                    <SelectTrigger><SelectValue /></SelectTrigger>
+                    <SelectContent>
+                      {CURRENCIES.map((c) => (
+                        <SelectItem key={c.value} value={c.value}>{c.label}</SelectItem>
+                      ))}
+                    </SelectContent>
+                  </Select>
+                </div>
               </div>
               <Button type="submit" className="w-full" disabled={createWallet.isPending}>
                 {createWallet.isPending ? "Creating..." : "Create Wallet"}
@@ -347,7 +368,7 @@ export default function WalletsPage() {
                 <div className="rounded-lg border border-orange-500/20 bg-orange-500/5 px-4 py-3 text-sm">
                   <p className="font-medium text-foreground">{aw?.name as string}</p>
                   <p className="text-xs mt-1 text-muted-foreground">
-                    This will archive <span className="font-medium text-foreground">{txCount}</span> transaction{txCount !== 1 ? "s" : ""}, reset the balance from <span className="font-medium text-foreground">{formatCurrency(balance)}</span> to <span className="font-medium text-foreground">{formatCurrency(0)}</span>, and zero all segment amounts. Segment configurations are preserved.
+                    This will archive <span className="font-medium text-foreground">{txCount}</span> transaction{txCount !== 1 ? "s" : ""}, reset the balance from <span className="font-medium text-foreground">{formatCurrency(balance, aw?.currency as string)}</span> to <span className="font-medium text-foreground">{formatCurrency(0, aw?.currency as string)}</span>, and zero all segment amounts. Segment configurations are preserved.
                   </p>
                   <p className="text-xs mt-2 text-muted-foreground">
                     Archived data is hidden from analytics but preserved in the database for audit.
@@ -567,7 +588,7 @@ export default function WalletsPage() {
                   <div className="mt-4 relative">
                     <p className="text-[10px] uppercase tracking-widest text-white/50">Balance</p>
                     <p className="text-2xl font-bold tabular-nums tracking-tight mt-0.5">
-                      {formatCurrency(balance)}
+                      {formatCurrency(balance, wallet.currency as string)}
                     </p>
                   </div>
 

@@ -45,6 +45,7 @@ export interface WalletStackItem {
   type: string
   bankName?: string | null
   balance: number | string
+  currency?: string
   segments?: { id: string; name: string; amount: number | string; color?: string }[]
   _count?: { transactions?: number }
 }
@@ -163,7 +164,7 @@ export function WalletCardStack({
                   </div>
                 )}
 
-                <p className="mt-4 w-full text-center text-[38px] font-bold leading-none tracking-tight tabular-nums">{formatCurrency(balance)}</p>
+                <p className="mt-4 w-full text-center text-[38px] font-bold leading-none tracking-tight tabular-nums">{formatCurrency(balance, w.currency)}</p>
 
                 <div className="mt-auto flex items-center gap-6 border-t border-white/10 pt-3">
                   <div>
